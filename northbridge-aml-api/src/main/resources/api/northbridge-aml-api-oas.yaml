@@ -1,0 +1,186 @@
+openapi: 3.0.3
+info:
+  title: NorthBridge AML Screening API
+  version: v1
+  description: CloudHub-ready AML screening API with MCP-style tool discovery and invocation endpoints.
+servers:
+  - url: https://{appName}.{region}.cloudhub.io
+    description: CloudHub public endpoint
+    variables:
+      appName:
+        default: northbridge-aml-api
+      region:
+        default: us-e2
+  - url: http://localhost:8081
+    description: Local development
+security:
+  - bearerAuth: []
+  - clientIdHeader: []
+    clientSecretHeader: []
+paths:
+  /api/v1/aml/screen:
+    post:
+      summary: Run AML screening
+      operationId: runAmlScreeningRest
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AmlScreeningRequest'
+            examples:
+              onboardingRequest:
+                value:
+                  legalName: ACME Manufacturing Ltd
+                  registrationNumber: "09876543"
+                  jurisdiction: UK
+                  beneficialOwners: ["Jane Roe"]
+                  directors: ["John Doe"]
+      responses:
+        '200':
+          description: AML screening result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AmlScreeningResponse'
+              examples:
+                passResult:
+                  value:
+                    status: PASS
+                    sanctionsHit: false
+                    reasons: ["No sanctions indicators detected in demo screening"]
+                    matchedSources: []
+                    checkId: AML-20260726235201
+                    checkedAt: "2026-07-26T23:52:01+05:30"
+                    sourceRef: 34ebdb7f-9b20-4bdb-b7d2-4c2f6d8ea37f
+  /mcp/tools:
+    get:
+      summary: Discover available MCP tools
+      operationId: listTools
+      responses:
+        '200':
+          description: Tool catalog
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ToolCatalog'
+  /mcp/tools/runAmlScreening/invoke:
+    post:
+      summary: Invoke AML MCP tool
+      operationId: runAmlScreeningMcp
+      parameters:
+        - in: header
+          name: x-correlation-id
+          schema:
+            type: string
+          required: false
+          description: Correlation ID for tracing across gateway/runtime.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/AmlScreeningRequest'
+                - $ref: '#/components/schemas/AmlInvokeWrapper'
+            examples:
+              invokeWrapped:
+                value:
+                  input:
+                    legalName: ACME Manufacturing Ltd
+                    registrationNumber: "09876543"
+                    jurisdiction: UK
+      responses:
+        '200':
+          description: AML screening result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AmlScreeningResponse'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    clientIdHeader:
+      type: apiKey
+      in: header
+      name: client_id
+    clientSecretHeader:
+      type: apiKey
+      in: header
+      name: client_secret
+  schemas:
+    AmlScreeningRequest:
+      type: object
+      required:
+        - legalName
+        - registrationNumber
+        - jurisdiction
+      properties:
+        legalName:
+          type: string
+        registrationNumber:
+          type: string
+        jurisdiction:
+          type: string
+        beneficialOwners:
+          type: array
+          items:
+            type: string
+        directors:
+          type: array
+          items:
+            type: string
+        idempotencyKey:
+          type: string
+    AmlInvokeWrapper:
+      type: object
+      required:
+        - input
+      properties:
+        input:
+          $ref: '#/components/schemas/AmlScreeningRequest'
+    AmlScreeningResponse:
+      type: object
+      required:
+        - status
+        - sanctionsHit
+        - reasons
+        - sourceRef
+      properties:
+        status:
+          type: string
+          enum: [PASS, FAIL, INCONCLUSIVE]
+        sanctionsHit:
+          type: boolean
+        reasons:
+          type: array
+          items:
+            type: string
+        matchedSources:
+          type: array
+          items:
+            type: string
+        checkId:
+          type: string
+        checkedAt:
+          type: string
+          format: date-time
+        sourceRef:
+          type: string
+    ToolCatalog:
+      type: object
+      properties:
+        tools:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              description:
+                type: string
+              inputSchema:
+                type: object

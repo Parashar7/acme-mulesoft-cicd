@@ -1,0 +1,11 @@
+# Build output
+target/
+
+# Mule runtime cache
+.mule/
+
+# IDE / OS files
+.classpath
+.project
+.settings/
+.DS_Store

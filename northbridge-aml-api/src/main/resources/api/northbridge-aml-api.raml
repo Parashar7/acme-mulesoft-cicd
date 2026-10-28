@@ -1,0 +1,36 @@
+#%RAML 1.0
+title: NorthBridge AML Screening API
+version: v1
+baseUri: /api/v1
+mediaType: application/json
+
+types:
+  AmlScreeningRequest:
+    type: object
+    required: [legalName, registrationNumber, jurisdiction]
+    properties:
+      legalName: string
+      registrationNumber: string
+      jurisdiction: string
+      beneficialOwners?: string[]
+      directors?: string[]
+  AmlScreeningResponse:
+    type: object
+    required: [status, sanctionsHit, reasons, sourceRef]
+    properties:
+      status:
+        enum: [PASS, FAIL, INCONCLUSIVE]
+      sanctionsHit: boolean
+      reasons: string[]
+      matchedSources?: string[]
+      sourceRef: string
+
+/aml/screen:
+  post:
+    description: Run AML and sanctions screening for onboarding.
+    body:
+      type: AmlScreeningRequest
+    responses:
+      200:
+        body:
+          type: AmlScreeningResponse
