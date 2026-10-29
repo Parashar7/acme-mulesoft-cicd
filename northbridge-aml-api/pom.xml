@@ -38,12 +38,6 @@
           <classifier>mule-application</classifier>
         </configuration>
       </plugin>
-      <!-- MUnit version and test execution are managed by the parent POM's pluginManagement.
-           No test files exist under src/test/munit yet; MUnit completes with 0 tests run. -->
-      <plugin>
-        <groupId>com.mulesoft.munit.tools</groupId>
-        <artifactId>munit-maven-plugin</artifactId>
-      </plugin>
     </plugins>
   </build>
 

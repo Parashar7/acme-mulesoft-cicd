@@ -1,5 +1,5 @@
 # Deploy pipeline for northbridge-aml-api
-# Stages: build-and-test → publish-to-exchange → deploy-sandbox → deploy-production
+# Stages: build → publish-to-exchange → deploy-sandbox → deploy-production
 
 name: Deploy northbridge-aml-api
 
@@ -29,14 +29,12 @@ env:
 
 jobs:
   # ---------------------------------------------------------------------------
-  # Job 1: Build, package and run MUnit.
+  # Job 1: Build and package the application. No tests are run.
   # Runs for every push and pull request. Does NOT receive deploy secrets,
   # so forked PR runs are safe.
-  # Note: no MUnit test files exist under src/test/munit yet;
-  #       MUnit completes successfully with 0 tests run.
   # ---------------------------------------------------------------------------
-  build-and-test:
-    name: Build and MUnit
+  build:
+    name: Build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -53,9 +51,9 @@ jobs:
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
           restore-keys: ${{ runner.os }}-maven-
 
-      - name: Build and MUnit
+      - name: Build
         run: |
-          mvn -B verify \
+          mvn -B package -DskipTests \
             -f northbridge-aml-api/pom.xml \
             -s settings.xml
 
@@ -74,7 +72,7 @@ jobs:
   # ---------------------------------------------------------------------------
   publish-to-exchange:
     name: Publish to Exchange
-    needs: build-and-test
+    needs: build
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     environment: sandbox
