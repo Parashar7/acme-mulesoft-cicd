@@ -22,8 +22,7 @@
   <name>northbridge-aml-api</name>
 
   <properties>
-    <!-- Override parent default; keeps this app pinned to Mule 4.6.0 explicitly. -->
-    <app.runtime>4.6.0</app.runtime>
+    <app.runtime>4.12.5</app.runtime>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
   </properties>
 

@@ -13,9 +13,7 @@
 
   <properties>
     <!-- Runtime -->
-    <app.runtime>4.6.0</app.runtime>
-    <!-- [VERIFY] Mule 4.6.0 + Java 17 on CloudHub 2.0: confirm this runtime/Java pair
-         is available in your Private Space before the first deploy. -->
+    <app.runtime>4.12.5</app.runtime>
     <java.version>17</java.version>
 
     <!-- Plugin versions -->
@@ -29,15 +27,12 @@
     <mule.sockets.version>1.2.7</mule.sockets.version>
     <mule.http.version>1.11.1</mule.http.version>
 
-    <!-- Anypoint coordinates
-         Fill __FILL_ME__ANYPOINT_ORG_ID__ with your Anypoint organization (Business Group) ID.
-         It appears in Anypoint Platform → Access Management → Organization → Organization ID. -->
+    <!-- Anypoint organization (Business Group) ID -->
     <anypoint.org.id>0d2dd5dc-4a01-4180-a12a-0c3c4d888c7b</anypoint.org.id>
 
     <!-- CloudHub 2.0 deployment defaults; override per app/environment via -D on the CLI. -->
     <anypoint.environment>Sandbox</anypoint.environment>
     <anypoint.private.space>mcp-private-space</anypoint.private.space>
-    <!-- [TBD] Set replica count and vCore size before the first deploy. -->
     <cloudhub2.replicas>1</cloudhub2.replicas>
     <cloudhub2.vcores>0.1</cloudhub2.vcores>
 
@@ -117,8 +112,6 @@
 
   <!-- ================================================================
        Exchange publish target.
-       The distributionManagement URL embeds the org ID so that the
-       published groupId matches what Anypoint Exchange requires.
        ================================================================ -->
   <distributionManagement>
     <repository>

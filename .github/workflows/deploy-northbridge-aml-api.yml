@@ -1,15 +1,5 @@
 # Deploy pipeline for northbridge-aml-api
 # Stages: build-and-test → publish-to-exchange → deploy-sandbox → deploy-production
-#
-# Before this pipeline can run end-to-end:
-#   1. Replace __FILL_ME__ANYPOINT_ORG_ID__ below with your Anypoint org ID.
-#   2. Create GitHub Environments 'sandbox' and 'production' (repo Settings → Environments).
-#   3. Add a required reviewer to the 'production' environment.
-#   4. Add ANYPOINT_CLIENT_ID and ANYPOINT_CLIENT_SECRET to EACH environment's secrets.
-#      (Use a separate Connected App per environment.)
-#
-# [VERIFY] Mule 4.6.0 + Java 17 on CloudHub 2.0: confirm this runtime/Java combination
-# is available in your Private Space before triggering a deploy.
 
 name: Deploy northbridge-aml-api
 
@@ -32,11 +22,8 @@ on:
 
 env:
   JAVA_VERSION: '17'
-  # Fill in your Anypoint organization ID (Access Management → Organization → Organization ID).
   ANYPOINT_ORG_ID: 0d2dd5dc-4a01-4180-a12a-0c3c4d888c7b
-  # CloudHub 2.0 Private Space name (same for Sandbox and Production).
   PRIVATE_SPACE: mcp-private-space
-  # [TBD] Set replica count and vCore size for each environment before the first deploy.
   CH2_REPLICAS: 1
   CH2_VCORES: '0.1'
 
