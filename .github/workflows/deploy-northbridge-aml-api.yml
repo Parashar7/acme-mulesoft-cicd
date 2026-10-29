@@ -59,6 +59,12 @@ jobs:
           retention-days: 1
           if-no-files-found: error
 
+  # ---------------------------------------------------------------------------
+  # Job 2: Publish to Anypoint Exchange via REST API.
+  # Using the Exchange 2 REST API directly (Bearer token from Connected App)
+  # bypasses the exchange-mule-maven-plugin which has version compatibility
+  # issues with the current Exchange API.
+  # ---------------------------------------------------------------------------
   publish-to-exchange:
     name: Publish to Exchange
     needs: build
@@ -67,66 +73,47 @@ jobs:
     environment: sandbox
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - name: Download application jar
+        uses: actions/download-artifact@v4
         with:
-          java-version: ${{ env.JAVA_VERSION }}
-          distribution: temurin
-      - name: Install Maven ${{ env.MAVEN_VERSION }}
-        run: |
-          curl -fsSL https://archive.apache.org/dist/maven/maven-3/${{ env.MAVEN_VERSION }}/binaries/apache-maven-${{ env.MAVEN_VERSION }}-bin.tar.gz \
-            | tar xz -C /opt
-          echo "/opt/apache-maven-${{ env.MAVEN_VERSION }}/bin" >> "$GITHUB_PATH"
-      - name: Restore Maven cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.m2/repository
-          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
-          restore-keys: ${{ runner.os }}-maven-
-      - name: Verify Connected App credentials
-        env:
-          ANYPOINT_CLIENT_ID: ${{ secrets.ANYPOINT_CLIENT_ID }}
-          ANYPOINT_CLIENT_SECRET: ${{ secrets.ANYPOINT_CLIENT_SECRET }}
-        run: |
-          HTTP=$(curl -s -o /dev/null -w "%{http_code}" \
-            -X POST "https://anypoint.mulesoft.com/accounts/api/v2/oauth2/token" \
-            -H "Content-Type: application/x-www-form-urlencoded" \
-            --data-urlencode "grant_type=client_credentials" \
-            --data-urlencode "client_id=${ANYPOINT_CLIENT_ID}" \
-            --data-urlencode "client_secret=${ANYPOINT_CLIENT_SECRET}")
-          echo "Token endpoint HTTP status: ${HTTP}"
-          [ "${HTTP}" = "200" ] || { echo "Credential check failed (status ${HTTP})"; exit 1; }
-      - name: Write Maven settings
-        env:
-          ANYPOINT_CLIENT_ID: ${{ secrets.ANYPOINT_CLIENT_ID }}
-          ANYPOINT_CLIENT_SECRET: ${{ secrets.ANYPOINT_CLIENT_SECRET }}
-        run: |
-          python3 - <<'PYEOF'
-          import os
-          cid = os.environ['ANYPOINT_CLIENT_ID']
-          cs  = os.environ['ANYPOINT_CLIENT_SECRET']
-          xml = ('<?xml version="1.0" encoding="UTF-8"?>\n'
-                 '<settings xmlns="http://maven.apache.org/SETTINGS/1.2.0">\n'
-                 '  <servers>\n'
-                 '    <server>\n'
-                 '      <id>anypoint-exchange-v3</id>\n'
-                 '      <username>~~~Client~~~</username>\n'
-                 f'      <password>{cid}~?~{cs}</password>\n'
-                 '    </server>\n'
-                 '  </servers>\n'
-                 '</settings>\n')
-          with open('/tmp/mvn-settings.xml', 'w') as f:
-              f.write(xml)
-          print('Settings file written')
-          PYEOF
+          name: app-jar
+          path: northbridge-aml-api/target/
       - name: Publish to Anypoint Exchange
         env:
           ANYPOINT_CLIENT_ID: ${{ secrets.ANYPOINT_CLIENT_ID }}
           ANYPOINT_CLIENT_SECRET: ${{ secrets.ANYPOINT_CLIENT_SECRET }}
         run: |
-          mvn -B deploy -DskipTests -DmuleDeploy=false \
-            -Danypoint.org.id="${{ env.ANYPOINT_ORG_ID }}" \
-            -f northbridge-aml-api/pom.xml \
-            -s /tmp/mvn-settings.xml
+          # Obtain access token
+          ACCESS_TOKEN=$(curl -sf \
+            -X POST "https://anypoint.mulesoft.com/accounts/api/v2/oauth2/token" \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            --data-urlencode "grant_type=client_credentials" \
+            --data-urlencode "client_id=${ANYPOINT_CLIENT_ID}" \
+            --data-urlencode "client_secret=${ANYPOINT_CLIENT_SECRET}" \
+            | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+
+          JAR=$(find northbridge-aml-api/target -name '*-mule-application.jar' | head -1)
+          VERSION=$(python3 -c "import xml.etree.ElementTree as ET; t=ET.parse('northbridge-aml-api/pom.xml'); ns={'m':'http://maven.apache.org/POM/4.0.0'}; print(t.find('m:version',ns).text)")
+          ORG="${{ env.ANYPOINT_ORG_ID }}"
+
+          echo "Publishing ${JAR} as version ${VERSION} to org ${ORG}"
+
+          HTTP=$(curl -s -o /tmp/exchange-response.json -w "%{http_code}" \
+            -X POST "https://anypoint.mulesoft.com/exchange/api/v2/organizations/${ORG}/assets" \
+            -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+            -F "organizationId=${ORG}" \
+            -F "groupId=${ORG}" \
+            -F "assetId=northbridge-aml-api" \
+            -F "version=${VERSION}" \
+            -F "name=northbridge-aml-api" \
+            -F "type=app" \
+            -F "classifier=mule-application" \
+            -F "packaging=jar" \
+            -F "main=@${JAR};type=application/java-archive")
+
+          echo "Exchange API HTTP status: ${HTTP}"
+          cat /tmp/exchange-response.json
+          [ "${HTTP}" = "200" ] || [ "${HTTP}" = "201" ] || { echo "Exchange publish failed"; exit 1; }
 
   deploy-sandbox:
     name: Deploy to Sandbox
