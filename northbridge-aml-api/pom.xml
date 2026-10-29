@@ -16,7 +16,7 @@
        to the Anypoint org ID at deploy time. -->
   <groupId>com.northbridge.bank</groupId>
   <artifactId>northbridge-aml-api</artifactId>
-  <version>1.0.0</version>
+  <version>1.0.2</version>
   <packaging>mule-application</packaging>
   <name>northbridge-aml-api</name>
 
@@ -39,7 +39,6 @@
     </plugins>
   </build>
 
-  <!-- Connector versions are inherited from the parent POM's dependencyManagement. -->
   <dependencies>
     <dependency>
       <groupId>org.mule.modules</groupId>

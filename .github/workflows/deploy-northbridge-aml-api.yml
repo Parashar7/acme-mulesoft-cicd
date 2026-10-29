@@ -1,5 +1,10 @@
 # Deploy pipeline for northbridge-aml-api
 # Stages: build → publish-to-exchange → deploy-sandbox → deploy-production
+#
+# Exchange publish uses 'mvn deploy' via the mule-maven-plugin (extensions=true)
+# which sends the correct Mule asset format that the Exchange Maven facade expects.
+# The deploy:deploy-file approach was abandoned because it sends a plain JAR
+# without Mule metadata, causing Exchange to reset the connection.
 
 name: Deploy northbridge-aml-api
 
@@ -27,9 +32,11 @@ env:
   PRIVATE_SPACE: mcp-private-space
   CH2_REPLICAS: 1
   CH2_VCORES: '0.1'
-  APP_VERSION: '1.0.1'
 
 jobs:
+  # ---------------------------------------------------------------------------
+  # Job 1: Build and package the application. No tests are run.
+  # ---------------------------------------------------------------------------
   build:
     name: Build
     runs-on: ubuntu-latest
@@ -60,6 +67,11 @@ jobs:
           retention-days: 1
           if-no-files-found: error
 
+  # ---------------------------------------------------------------------------
+  # Job 2: Publish to Anypoint Exchange via mule-maven-plugin deploy phase.
+  # Re-packages inline (fast, no Java compilation) so the plugin can attach
+  # the correct Mule asset metadata that Exchange requires.
+  # ---------------------------------------------------------------------------
   publish-to-exchange:
     name: Publish to Exchange
     needs: build
@@ -83,11 +95,6 @@ jobs:
           path: ~/.m2/repository
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
           restore-keys: ${{ runner.os }}-maven-
-      - name: Download application jar
-        uses: actions/download-artifact@v4
-        with:
-          name: app-jar
-          path: northbridge-aml-api/target/
       - name: Verify Connected App credentials
         env:
           ANYPOINT_CLIENT_ID: ${{ secrets.ANYPOINT_CLIENT_ID }}
@@ -125,24 +132,22 @@ jobs:
           print('Settings file written')
           PYEOF
       - name: Publish to Anypoint Exchange
+        # Uses 'mvn deploy' via the mule-maven-plugin (extensions=true). The plugin
+        # publishes the packaged Mule application to Exchange using the correct
+        # asset format. -DmuleDeploy=false prevents any CloudHub deployment attempt.
         env:
           ANYPOINT_CLIENT_ID: ${{ secrets.ANYPOINT_CLIENT_ID }}
           ANYPOINT_CLIENT_SECRET: ${{ secrets.ANYPOINT_CLIENT_SECRET }}
         run: |
-          JAR=$(find northbridge-aml-api/target -name '*-mule-application.jar' | head -1)
-          echo "Publishing: ${JAR} as version ${{ env.APP_VERSION }}"
-          mvn -B org.apache.maven.plugins:maven-deploy-plugin:2.8.2:deploy-file \
-            -Dfile="${JAR}" \
-            -DgroupId="${{ env.ANYPOINT_ORG_ID }}" \
-            -DartifactId=northbridge-aml-api \
-            -Dversion=${{ env.APP_VERSION }} \
-            -Dclassifier=mule-application \
-            -Dpackaging=jar \
-            -DgeneratePom=false \
-            -DrepositoryId=anypoint-exchange-v3 \
-            -Durl="https://maven.anypoint.mulesoft.com/api/v3/organizations/${{ env.ANYPOINT_ORG_ID }}/maven" \
+          mvn -B deploy -DskipTests -DmuleDeploy=false \
+            -Danypoint.org.id="${{ env.ANYPOINT_ORG_ID }}" \
+            -f northbridge-aml-api/pom.xml \
             -s /tmp/mvn-settings.xml
 
+  # ---------------------------------------------------------------------------
+  # Job 3: Deploy the published artifact to CloudHub 2.0 Sandbox.
+  # Downloads the pre-built jar — no recompilation.
+  # ---------------------------------------------------------------------------
   deploy-sandbox:
     name: Deploy to Sandbox
     needs: publish-to-exchange
@@ -208,6 +213,10 @@ jobs:
             -Dcloudhub2.replicas=${{ env.CH2_REPLICAS }} \
             -Dcloudhub2.vcores=${{ env.CH2_VCORES }}
 
+  # ---------------------------------------------------------------------------
+  # Job 4: Deploy the same artifact to CloudHub 2.0 Production.
+  # Gated by the 'production' GitHub Environment (required reviewer).
+  # ---------------------------------------------------------------------------
   deploy-production:
     name: Deploy to Production
     needs: deploy-sandbox
