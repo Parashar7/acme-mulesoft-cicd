@@ -32,7 +32,7 @@
     <!-- Anypoint coordinates
          Fill __FILL_ME__ANYPOINT_ORG_ID__ with your Anypoint organization (Business Group) ID.
          It appears in Anypoint Platform → Access Management → Organization → Organization ID. -->
-    <anypoint.org.id>__FILL_ME__ANYPOINT_ORG_ID__</anypoint.org.id>
+    <anypoint.org.id>0d2dd5dc-4a01-4180-a12a-0c3c4d888c7b</anypoint.org.id>
 
     <!-- CloudHub 2.0 deployment defaults; override per app/environment via -D on the CLI. -->
     <anypoint.environment>Sandbox</anypoint.environment>
