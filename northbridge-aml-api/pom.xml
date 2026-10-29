@@ -28,9 +28,9 @@
   <build>
     <plugins>
       <!--
-        cloudHub2Deployment is in the base config so mule:deploy (standalone goal)
-        always finds it. The configuration values are all property-driven; the
-        deploy never runs unless mule:deploy is explicitly invoked.
+        cloudhub2Deployment is in the base config so mule:deploy (standalone goal)
+        always finds it. The parameter name in mule-maven-plugin 4.10.3 is
+        'cloudhub2Deployment' (all lowercase), not 'cloudHub2Deployment'.
       -->
       <plugin>
         <groupId>org.mule.tools.maven</groupId>
@@ -39,7 +39,7 @@
         <extensions>true</extensions>
         <configuration>
           <classifier>mule-application</classifier>
-          <cloudHub2Deployment>
+          <cloudhub2Deployment>
             <uri>https://anypoint.mulesoft.com</uri>
             <provider>MC</provider>
             <environment>${anypoint.environment}</environment>
@@ -53,7 +53,7 @@
             <connectedAppClientSecret>${env.ANYPOINT_CLIENT_SECRET}</connectedAppClientSecret>
             <connectedAppGrantType>client_credentials</connectedAppGrantType>
             <businessGroupId>${anypoint.org.id}</businessGroupId>
-          </cloudHub2Deployment>
+          </cloudhub2Deployment>
         </configuration>
       </plugin>
     </plugins>

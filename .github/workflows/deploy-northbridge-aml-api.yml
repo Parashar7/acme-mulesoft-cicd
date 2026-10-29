@@ -59,6 +59,9 @@ jobs:
           retention-days: 1
           if-no-files-found: error
 
+  # ---------------------------------------------------------------------------
+  # Job 2: Publish to Anypoint Exchange (non-blocking).
+  # ---------------------------------------------------------------------------
   publish-to-exchange:
     name: Publish to Exchange
     needs: build
@@ -110,6 +113,11 @@ jobs:
           echo "status2=${HTTP2}"; cat /tmp/ex-r2.json; echo
           [ "${HTTP2}" = "200" ] || [ "${HTTP2}" = "201" ] || { echo "Exchange publish failed"; exit 1; }
 
+  # ---------------------------------------------------------------------------
+  # Job 3: Deploy to CloudHub 2.0 Sandbox.
+  # The cloudhub2Deployment config is in the app POM's base plugin config.
+  # mule-maven-plugin 4.10.3 uses 'cloudhub2Deployment' (all lowercase).
+  # ---------------------------------------------------------------------------
   deploy-sandbox:
     name: Deploy to Sandbox
     needs: build
@@ -133,16 +141,6 @@ jobs:
           path: ~/.m2/repository
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
           restore-keys: ${{ runner.os }}-maven-
-      - name: Describe mule:deploy parameters
-        run: |
-          mvn -B help:describe \
-            -Dplugin=org.mule.tools.maven:mule-maven-plugin:4.10.3 \
-            -Dgoal=deploy \
-            -Ddetail=true \
-            -f northbridge-aml-api/pom.xml \
-            > /tmp/mule-deploy-describe.txt 2>&1 || true
-          echo '=== DEPLOY MOJO PARAMETERS ==='
-          cat /tmp/mule-deploy-describe.txt
       - name: Download application jar
         uses: actions/download-artifact@v4
         with:
@@ -179,13 +177,16 @@ jobs:
           mvn -B mule:deploy \
             -f northbridge-aml-api/pom.xml \
             -s /tmp/mvn-settings.xml \
-            -Pcloudhub2 \
             -Danypoint.org.id="${{ env.ANYPOINT_ORG_ID }}" \
             -Danypoint.environment=Sandbox \
             -Danypoint.private.space="${{ env.PRIVATE_SPACE }}" \
             -Dcloudhub2.replicas=${{ env.CH2_REPLICAS }} \
             -Dcloudhub2.vcores=${{ env.CH2_VCORES }}
 
+  # ---------------------------------------------------------------------------
+  # Job 4: Deploy to CloudHub 2.0 Production.
+  # Gated by the 'production' GitHub Environment (required reviewer).
+  # ---------------------------------------------------------------------------
   deploy-production:
     name: Deploy to Production
     needs: deploy-sandbox
@@ -244,7 +245,6 @@ jobs:
           mvn -B mule:deploy \
             -f northbridge-aml-api/pom.xml \
             -s /tmp/mvn-settings.xml \
-            -Pcloudhub2 \
             -Danypoint.org.id="${{ env.ANYPOINT_ORG_ID }}" \
             -Danypoint.environment=Production \
             -Danypoint.private.space="${{ env.PRIVATE_SPACE }}" \
