@@ -31,8 +31,6 @@ env:
 jobs:
   # ---------------------------------------------------------------------------
   # Job 1: Build and package the application. No tests are run.
-  # Runs for every push and pull request. Does NOT receive deploy secrets,
-  # so forked PR runs are safe.
   # ---------------------------------------------------------------------------
   build:
     name: Build
@@ -74,9 +72,6 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # Job 2: Publish the pre-built jar to Anypoint Exchange.
-  # Skipped on pull requests so secrets are never exposed to forked PRs.
-  # Credentials are written into a temp settings file by the shell at runtime
-  # so Maven does not need to interpolate ${env.*} in standalone-pom mode.
   # ---------------------------------------------------------------------------
   publish-to-exchange:
     name: Publish to Exchange
@@ -111,27 +106,55 @@ jobs:
           name: app-jar
           path: northbridge-aml-api/target/
 
+      - name: Verify Connected App credentials
+        # Calls the Anypoint token endpoint and prints only the HTTP status code.
+        # A 200 confirms the credentials are accepted; anything else fails the step.
+        env:
+          ANYPOINT_CLIENT_ID: ${{ secrets.ANYPOINT_CLIENT_ID }}
+          ANYPOINT_CLIENT_SECRET: ${{ secrets.ANYPOINT_CLIENT_SECRET }}
+        run: |
+          echo "Client ID length : ${#ANYPOINT_CLIENT_ID}"
+          echo "Client Secret length: ${#ANYPOINT_CLIENT_SECRET}"
+          HTTP=$(curl -s -o /dev/null -w "%{http_code}" \
+            -X POST "https://anypoint.mulesoft.com/accounts/api/v2/oauth2/token" \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            --data-urlencode "grant_type=client_credentials" \
+            --data-urlencode "client_id=${ANYPOINT_CLIENT_ID}" \
+            --data-urlencode "client_secret=${ANYPOINT_CLIENT_SECRET}")
+          echo "Token endpoint HTTP status: ${HTTP}"
+          [ "${HTTP}" = "200" ] || { echo "Credential check failed (status ${HTTP})"; exit 1; }
+
+      - name: Write Maven settings
+        env:
+          ANYPOINT_CLIENT_ID: ${{ secrets.ANYPOINT_CLIENT_ID }}
+          ANYPOINT_CLIENT_SECRET: ${{ secrets.ANYPOINT_CLIENT_SECRET }}
+        run: |
+          python3 - <<'PYEOF'
+          import os
+          cid = os.environ['ANYPOINT_CLIENT_ID']
+          cs  = os.environ['ANYPOINT_CLIENT_SECRET']
+          xml = ('<?xml version="1.0" encoding="UTF-8"?>\n'
+                 '<settings xmlns="http://maven.apache.org/SETTINGS/1.2.0">\n'
+                 '  <servers>\n'
+                 '    <server>\n'
+                 '      <id>anypoint-exchange-v3</id>\n'
+                 '      <username>~~~Client~~~</username>\n'
+                 f'      <password>{cid}~?~{cs}</password>\n'
+                 '    </server>\n'
+                 '  </servers>\n'
+                 '</settings>\n')
+          with open('/tmp/mvn-settings.xml', 'w') as f:
+              f.write(xml)
+          print('Settings file written successfully')
+          PYEOF
+
       - name: Publish to Anypoint Exchange
         env:
           ANYPOINT_CLIENT_ID: ${{ secrets.ANYPOINT_CLIENT_ID }}
           ANYPOINT_CLIENT_SECRET: ${{ secrets.ANYPOINT_CLIENT_SECRET }}
         run: |
-          # Write a settings file with credentials substituted by the shell.
-          # The file lives only for the duration of this job in /tmp.
-          cat > /tmp/mvn-settings.xml << EOF
-          <?xml version="1.0" encoding="UTF-8"?>
-          <settings xmlns="http://maven.apache.org/SETTINGS/1.2.0">
-            <servers>
-              <server>
-                <id>anypoint-exchange-v3</id>
-                <username>~~~Client~~~</username>
-                <password>${ANYPOINT_CLIENT_ID}~?~${ANYPOINT_CLIENT_SECRET}</password>
-              </server>
-            </servers>
-          </settings>
-          EOF
-
           JAR=$(find northbridge-aml-api/target -name '*-mule-application.jar' | head -1)
+          echo "Publishing: ${JAR}"
           mvn -B deploy:deploy-file \
             -Dfile="${JAR}" \
             -DgroupId="${{ env.ANYPOINT_ORG_ID }}" \
@@ -146,9 +169,6 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # Job 3: Deploy the published artifact to CloudHub 2.0 Sandbox.
-  # Downloads the pre-built jar — no recompilation.
-  # The mule-maven-plugin polls until replicas are running; the step fails if
-  # replicas do not reach a started state within the plugin's timeout.
   # ---------------------------------------------------------------------------
   deploy-sandbox:
     name: Deploy to Sandbox
@@ -182,24 +202,35 @@ jobs:
           name: app-jar
           path: northbridge-aml-api/target/
 
+      - name: Write Maven settings
+        env:
+          ANYPOINT_CLIENT_ID: ${{ secrets.ANYPOINT_CLIENT_ID }}
+          ANYPOINT_CLIENT_SECRET: ${{ secrets.ANYPOINT_CLIENT_SECRET }}
+        run: |
+          python3 - <<'PYEOF'
+          import os
+          cid = os.environ['ANYPOINT_CLIENT_ID']
+          cs  = os.environ['ANYPOINT_CLIENT_SECRET']
+          xml = ('<?xml version="1.0" encoding="UTF-8"?>\n'
+                 '<settings xmlns="http://maven.apache.org/SETTINGS/1.2.0">\n'
+                 '  <servers>\n'
+                 '    <server>\n'
+                 '      <id>anypoint-exchange-v3</id>\n'
+                 '      <username>~~~Client~~~</username>\n'
+                 f'      <password>{cid}~?~{cs}</password>\n'
+                 '    </server>\n'
+                 '  </servers>\n'
+                 '</settings>\n')
+          with open('/tmp/mvn-settings.xml', 'w') as f:
+              f.write(xml)
+          print('Settings file written successfully')
+          PYEOF
+
       - name: Deploy to CloudHub 2.0 Sandbox
         env:
           ANYPOINT_CLIENT_ID: ${{ secrets.ANYPOINT_CLIENT_ID }}
           ANYPOINT_CLIENT_SECRET: ${{ secrets.ANYPOINT_CLIENT_SECRET }}
         run: |
-          cat > /tmp/mvn-settings.xml << EOF
-          <?xml version="1.0" encoding="UTF-8"?>
-          <settings xmlns="http://maven.apache.org/SETTINGS/1.2.0">
-            <servers>
-              <server>
-                <id>anypoint-exchange-v3</id>
-                <username>~~~Client~~~</username>
-                <password>${ANYPOINT_CLIENT_ID}~?~${ANYPOINT_CLIENT_SECRET}</password>
-              </server>
-            </servers>
-          </settings>
-          EOF
-
           mvn -B mule:deploy \
             -f northbridge-aml-api/pom.xml \
             -s /tmp/mvn-settings.xml \
@@ -212,9 +243,7 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # Job 4: Deploy the same artifact to CloudHub 2.0 Production.
-  # Gated by the 'production' GitHub Environment, which requires a reviewer
-  # approval before the job runs.
-  # Downloads the pre-built jar — no rebuild, no re-test.
+  # Gated by the 'production' GitHub Environment (required reviewer).
   # ---------------------------------------------------------------------------
   deploy-production:
     name: Deploy to Production
@@ -248,24 +277,35 @@ jobs:
           name: app-jar
           path: northbridge-aml-api/target/
 
+      - name: Write Maven settings
+        env:
+          ANYPOINT_CLIENT_ID: ${{ secrets.ANYPOINT_CLIENT_ID }}
+          ANYPOINT_CLIENT_SECRET: ${{ secrets.ANYPOINT_CLIENT_SECRET }}
+        run: |
+          python3 - <<'PYEOF'
+          import os
+          cid = os.environ['ANYPOINT_CLIENT_ID']
+          cs  = os.environ['ANYPOINT_CLIENT_SECRET']
+          xml = ('<?xml version="1.0" encoding="UTF-8"?>\n'
+                 '<settings xmlns="http://maven.apache.org/SETTINGS/1.2.0">\n'
+                 '  <servers>\n'
+                 '    <server>\n'
+                 '      <id>anypoint-exchange-v3</id>\n'
+                 '      <username>~~~Client~~~</username>\n'
+                 f'      <password>{cid}~?~{cs}</password>\n'
+                 '    </server>\n'
+                 '  </servers>\n'
+                 '</settings>\n')
+          with open('/tmp/mvn-settings.xml', 'w') as f:
+              f.write(xml)
+          print('Settings file written successfully')
+          PYEOF
+
       - name: Deploy to CloudHub 2.0 Production
         env:
           ANYPOINT_CLIENT_ID: ${{ secrets.ANYPOINT_CLIENT_ID }}
           ANYPOINT_CLIENT_SECRET: ${{ secrets.ANYPOINT_CLIENT_SECRET }}
         run: |
-          cat > /tmp/mvn-settings.xml << EOF
-          <?xml version="1.0" encoding="UTF-8"?>
-          <settings xmlns="http://maven.apache.org/SETTINGS/1.2.0">
-            <servers>
-              <server>
-                <id>anypoint-exchange-v3</id>
-                <username>~~~Client~~~</username>
-                <password>${ANYPOINT_CLIENT_ID}~?~${ANYPOINT_CLIENT_SECRET}</password>
-              </server>
-            </servers>
-          </settings>
-          EOF
-
           mvn -B mule:deploy \
             -f northbridge-aml-api/pom.xml \
             -s /tmp/mvn-settings.xml \
