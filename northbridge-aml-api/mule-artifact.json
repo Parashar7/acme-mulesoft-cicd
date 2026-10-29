@@ -1,6 +1,6 @@
 {
     "name": "northbridge-aml-api",
-    "minMuleVersion": "4.6.0",
+    "minMuleVersion": "4.12.5",
     "javaSpecificationVersions": ["17"],
     "secureProperties": []
 }

@@ -13,11 +13,10 @@
   </parent>
 
   <!-- groupId must equal the Anypoint org UUID for Exchange publishing.
-       The value is inherited from anypoint.org.id in the parent POM.
-       MuleSoft convention: Exchange asset groupId == org UUID. -->
+       The value is inherited from anypoint.org.id in the parent POM. -->
   <groupId>${anypoint.org.id}</groupId>
   <artifactId>northbridge-aml-api</artifactId>
-  <version>1.0.2</version>
+  <version>1.0.5</version>
   <packaging>mule-application</packaging>
   <name>northbridge-aml-api</name>
 
