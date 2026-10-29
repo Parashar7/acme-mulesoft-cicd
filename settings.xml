@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Maven settings for Acme MuleSoft CI/CD.
+
+  CREDENTIALS — never store values here.
+  The pipeline injects these environment variables into the runner:
+    ANYPOINT_CLIENT_ID     — Connected App client ID for the target Anypoint environment
+    ANYPOINT_CLIENT_SECRET — Connected App client secret for the target Anypoint environment
+
+  Each GitHub Environment (sandbox, production) stores its own pair of these secrets.
+  See the PR description for the full secret-fill checklist.
+-->
+<settings xmlns="http://maven.apache.org/SETTINGS/1.2.0"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.2.0
+                              https://maven.apache.org/xsd/settings-1.2.0.xsd">
+  <servers>
+    <!--
+      Anypoint Exchange V3 (publish + dependency resolution).
+      The id must match the <repository id> and <distributionManagement id> in the parent POM.
+      Connected App credentials use the ~~~Client~~~ username sentinel that Exchange expects.
+    -->
+    <server>
+      <id>anypoint-exchange-v3</id>
+      <username>~~~Client~~~</username>
+      <password>${env.ANYPOINT_CLIENT_ID}~?~${env.ANYPOINT_CLIENT_SECRET}</password>
+    </server>
+    <!--
+      MuleSoft releases repository (resolves connectors and plugin artifacts).
+      No credentials required for the public releases repository.
+    -->
+    <server>
+      <id>mulesoft-releases</id>
+    </server>
+  </servers>
+</settings>
