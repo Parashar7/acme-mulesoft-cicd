@@ -12,8 +12,8 @@
     <relativePath>../mule-parent-pom/pom.xml</relativePath>
   </parent>
 
-  <!-- groupId must equal the Anypoint org UUID for Exchange publishing.
-       The value is inherited from anypoint.org.id in the parent POM. -->
+  <!-- groupId == Anypoint org UUID (Exchange requirement). Value comes from
+       anypoint.org.id in the parent POM. -->
   <groupId>${anypoint.org.id}</groupId>
   <artifactId>northbridge-aml-api</artifactId>
   <version>1.0.5</version>
@@ -66,4 +66,41 @@
       <classifier>mule-plugin</classifier>
     </dependency>
   </dependencies>
+
+  <!-- CloudHub 2.0 deployment profile.
+       Defined here (not only in parent) so mule:deploy as a standalone goal
+       can always find the deployment configuration. -->
+  <profiles>
+    <profile>
+      <id>cloudhub2</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.mule.tools.maven</groupId>
+            <artifactId>mule-maven-plugin</artifactId>
+            <version>${mule.maven.plugin.version}</version>
+            <extensions>true</extensions>
+            <configuration>
+              <classifier>mule-application</classifier>
+              <cloudHub2Deployment>
+                <uri>https://anypoint.mulesoft.com</uri>
+                <provider>MC</provider>
+                <environment>${anypoint.environment}</environment>
+                <target>${anypoint.private.space}</target>
+                <muleVersion>${app.runtime}</muleVersion>
+                <javaVersion>${java.version}</javaVersion>
+                <applicationName>${project.artifactId}</applicationName>
+                <replicas>${cloudhub2.replicas}</replicas>
+                <vCores>${cloudhub2.vcores}</vCores>
+                <connectedAppClientId>${env.ANYPOINT_CLIENT_ID}</connectedAppClientId>
+                <connectedAppClientSecret>${env.ANYPOINT_CLIENT_SECRET}</connectedAppClientSecret>
+                <connectedAppGrantType>client_credentials</connectedAppGrantType>
+                <businessGroupId>${anypoint.org.id}</businessGroupId>
+              </cloudHub2Deployment>
+            </configuration>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
 </project>
