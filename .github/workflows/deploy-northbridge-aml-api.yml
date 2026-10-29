@@ -115,8 +115,9 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # Job 3: Deploy to CloudHub 2.0 Sandbox.
-  # The cloudhub2Deployment config is in the app POM's base plugin config.
-  # mule-maven-plugin 4.10.3 uses 'cloudhub2Deployment' (all lowercase).
+  # mvn package -DskipTests runs first so project.artifact is non-null when
+  # mule:deploy reads it. Re-packaging is fast (~20s, no Java compilation).
+  # Connected App needs 'Cloudhub Application' scope for this step.
   # ---------------------------------------------------------------------------
   deploy-sandbox:
     name: Deploy to Sandbox
@@ -141,11 +142,6 @@ jobs:
           path: ~/.m2/repository
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
           restore-keys: ${{ runner.os }}-maven-
-      - name: Download application jar
-        uses: actions/download-artifact@v4
-        with:
-          name: app-jar
-          path: northbridge-aml-api/target/
       - name: Write Maven settings
         env:
           ANYPOINT_CLIENT_ID: ${{ secrets.ANYPOINT_CLIENT_ID }}
@@ -169,12 +165,12 @@ jobs:
               f.write(xml)
           print('Settings file written')
           PYEOF
-      - name: Deploy to CloudHub 2.0 Sandbox
+      - name: Package and deploy to CloudHub 2.0 Sandbox
         env:
           ANYPOINT_CLIENT_ID: ${{ secrets.ANYPOINT_CLIENT_ID }}
           ANYPOINT_CLIENT_SECRET: ${{ secrets.ANYPOINT_CLIENT_SECRET }}
         run: |
-          mvn -B mule:deploy \
+          mvn -B package mule:deploy -DskipTests \
             -f northbridge-aml-api/pom.xml \
             -s /tmp/mvn-settings.xml \
             -Danypoint.org.id="${{ env.ANYPOINT_ORG_ID }}" \
@@ -209,11 +205,6 @@ jobs:
           path: ~/.m2/repository
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
           restore-keys: ${{ runner.os }}-maven-
-      - name: Download application jar
-        uses: actions/download-artifact@v4
-        with:
-          name: app-jar
-          path: northbridge-aml-api/target/
       - name: Write Maven settings
         env:
           ANYPOINT_CLIENT_ID: ${{ secrets.ANYPOINT_CLIENT_ID }}
@@ -237,12 +228,12 @@ jobs:
               f.write(xml)
           print('Settings file written')
           PYEOF
-      - name: Deploy to CloudHub 2.0 Production
+      - name: Package and deploy to CloudHub 2.0 Production
         env:
           ANYPOINT_CLIENT_ID: ${{ secrets.ANYPOINT_CLIENT_ID }}
           ANYPOINT_CLIENT_SECRET: ${{ secrets.ANYPOINT_CLIENT_SECRET }}
         run: |
-          mvn -B mule:deploy \
+          mvn -B package mule:deploy -DskipTests \
             -f northbridge-aml-api/pom.xml \
             -s /tmp/mvn-settings.xml \
             -Danypoint.org.id="${{ env.ANYPOINT_ORG_ID }}" \
