@@ -27,6 +27,7 @@ env:
   PRIVATE_SPACE: mcp-private-space
   CH2_REPLICAS: 1
   CH2_VCORES: '0.1'
+  APP_VERSION: '1.0.0'
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -72,6 +73,7 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # Job 2: Publish the pre-built jar to Anypoint Exchange.
+  # Exchange only accepts RELEASE versions (not SNAPSHOT).
   # ---------------------------------------------------------------------------
   publish-to-exchange:
     name: Publish to Exchange
@@ -107,14 +109,10 @@ jobs:
           path: northbridge-aml-api/target/
 
       - name: Verify Connected App credentials
-        # Calls the Anypoint token endpoint and prints only the HTTP status code.
-        # A 200 confirms the credentials are accepted; anything else fails the step.
         env:
           ANYPOINT_CLIENT_ID: ${{ secrets.ANYPOINT_CLIENT_ID }}
           ANYPOINT_CLIENT_SECRET: ${{ secrets.ANYPOINT_CLIENT_SECRET }}
         run: |
-          echo "Client ID length : ${#ANYPOINT_CLIENT_ID}"
-          echo "Client Secret length: ${#ANYPOINT_CLIENT_SECRET}"
           HTTP=$(curl -s -o /dev/null -w "%{http_code}" \
             -X POST "https://anypoint.mulesoft.com/accounts/api/v2/oauth2/token" \
             -H "Content-Type: application/x-www-form-urlencoded" \
@@ -145,7 +143,7 @@ jobs:
                  '</settings>\n')
           with open('/tmp/mvn-settings.xml', 'w') as f:
               f.write(xml)
-          print('Settings file written successfully')
+          print('Settings file written')
           PYEOF
 
       - name: Publish to Anypoint Exchange
@@ -159,7 +157,7 @@ jobs:
             -Dfile="${JAR}" \
             -DgroupId="${{ env.ANYPOINT_ORG_ID }}" \
             -DartifactId=northbridge-aml-api \
-            -Dversion=1.0.0-SNAPSHOT \
+            -Dversion=${{ env.APP_VERSION }} \
             -Dclassifier=mule-application \
             -Dpackaging=jar \
             -DgeneratePom=false \
@@ -223,7 +221,7 @@ jobs:
                  '</settings>\n')
           with open('/tmp/mvn-settings.xml', 'w') as f:
               f.write(xml)
-          print('Settings file written successfully')
+          print('Settings file written')
           PYEOF
 
       - name: Deploy to CloudHub 2.0 Sandbox
@@ -298,7 +296,7 @@ jobs:
                  '</settings>\n')
           with open('/tmp/mvn-settings.xml', 'w') as f:
               f.write(xml)
-          print('Settings file written successfully')
+          print('Settings file written')
           PYEOF
 
       - name: Deploy to CloudHub 2.0 Production
