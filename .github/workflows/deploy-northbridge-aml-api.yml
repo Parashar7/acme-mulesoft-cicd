@@ -1,0 +1,227 @@
+# Deploy pipeline for northbridge-aml-api
+# Stages: build-and-test → publish-to-exchange → deploy-sandbox → deploy-production
+#
+# Before this pipeline can run end-to-end:
+#   1. Replace __FILL_ME__ANYPOINT_ORG_ID__ below with your Anypoint org ID.
+#   2. Create GitHub Environments 'sandbox' and 'production' (repo Settings → Environments).
+#   3. Add a required reviewer to the 'production' environment.
+#   4. Add ANYPOINT_CLIENT_ID and ANYPOINT_CLIENT_SECRET to EACH environment's secrets.
+#      (Use a separate Connected App per environment.)
+#
+# [VERIFY] Mule 4.6.0 + Java 17 on CloudHub 2.0: confirm this runtime/Java combination
+# is available in your Private Space before triggering a deploy.
+
+name: Deploy northbridge-aml-api
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'northbridge-aml-api/**'
+      - 'mule-parent-pom/**'
+      - 'settings.xml'
+      - '.github/workflows/deploy-northbridge-aml-api.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'northbridge-aml-api/**'
+      - 'mule-parent-pom/**'
+      - 'settings.xml'
+      - '.github/workflows/deploy-northbridge-aml-api.yml'
+  workflow_dispatch:
+
+env:
+  JAVA_VERSION: '17'
+  # Fill in your Anypoint organization ID (Access Management → Organization → Organization ID).
+  ANYPOINT_ORG_ID: __FILL_ME__ANYPOINT_ORG_ID__
+  # CloudHub 2.0 Private Space name (same for Sandbox and Production).
+  PRIVATE_SPACE: mcp-private-space
+  # [TBD] Set replica count and vCore size for each environment before the first deploy.
+  CH2_REPLICAS: 1
+  CH2_VCORES: '0.1'
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Job 1: Build, package and run MUnit.
+  # Runs for every push and pull request. Does NOT receive deploy secrets,
+  # so forked PR runs are safe.
+  # Note: no MUnit test files exist under src/test/munit yet;
+  #       MUnit completes successfully with 0 tests run.
+  # ---------------------------------------------------------------------------
+  build-and-test:
+    name: Build and MUnit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: temurin
+
+      - name: Restore Maven cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-maven-
+
+      - name: Build and MUnit
+        run: |
+          mvn -B verify \
+            -f northbridge-aml-api/pom.xml \
+            -s settings.xml
+
+      - name: Upload application jar
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-jar
+          path: northbridge-aml-api/target/northbridge-aml-api-*-mule-application.jar
+          retention-days: 1
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  # Job 2: Publish the pre-built jar to Anypoint Exchange.
+  # Skipped on pull requests so secrets are never exposed to forked PRs.
+  # Uses the 'sandbox' GitHub Environment for the Connected App credentials.
+  # ---------------------------------------------------------------------------
+  publish-to-exchange:
+    name: Publish to Exchange
+    needs: build-and-test
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    environment: sandbox
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: temurin
+
+      - name: Restore Maven cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-maven-
+
+      - name: Download application jar
+        uses: actions/download-artifact@v4
+        with:
+          name: app-jar
+          path: northbridge-aml-api/target/
+
+      - name: Publish to Anypoint Exchange
+        # The groupId is overridden to the Anypoint org ID, which Exchange requires.
+        # Credentials are injected as environment variables; they are never echoed.
+        env:
+          ANYPOINT_CLIENT_ID: ${{ secrets.ANYPOINT_CLIENT_ID }}
+          ANYPOINT_CLIENT_SECRET: ${{ secrets.ANYPOINT_CLIENT_SECRET }}
+        run: |
+          JAR=$(find northbridge-aml-api/target -name '*-mule-application.jar' | head -1)
+          mvn -B deploy:deploy-file \
+            -Dfile="${JAR}" \
+            -DgroupId="${{ env.ANYPOINT_ORG_ID }}" \
+            -DartifactId=northbridge-aml-api \
+            -Dversion=1.0.0-SNAPSHOT \
+            -Dclassifier=mule-application \
+            -Dpackaging=jar \
+            -DgeneratePom=false \
+            -DrepositoryId=anypoint-exchange-v3 \
+            -Durl="https://maven.anypoint.mulesoft.com/api/v3/organizations/${{ env.ANYPOINT_ORG_ID }}/maven" \
+            -s settings.xml
+
+  # ---------------------------------------------------------------------------
+  # Job 3: Deploy the published artifact to CloudHub 2.0 Sandbox.
+  # Downloads the pre-built jar — no recompilation.
+  # The mule-maven-plugin polls until replicas are running; the step fails if
+  # replicas do not reach a started state within the plugin's timeout.
+  # ---------------------------------------------------------------------------
+  deploy-sandbox:
+    name: Deploy to Sandbox
+    needs: publish-to-exchange
+    runs-on: ubuntu-latest
+    environment: sandbox
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: temurin
+
+      - name: Restore Maven cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-maven-
+
+      - name: Download application jar
+        uses: actions/download-artifact@v4
+        with:
+          name: app-jar
+          path: northbridge-aml-api/target/
+
+      - name: Deploy to CloudHub 2.0 Sandbox
+        env:
+          ANYPOINT_CLIENT_ID: ${{ secrets.ANYPOINT_CLIENT_ID }}
+          ANYPOINT_CLIENT_SECRET: ${{ secrets.ANYPOINT_CLIENT_SECRET }}
+        run: |
+          mvn -B mule:deploy \
+            -f northbridge-aml-api/pom.xml \
+            -s settings.xml \
+            -Pcloudhub2 \
+            -Danypoint.org.id="${{ env.ANYPOINT_ORG_ID }}" \
+            -Danypoint.environment=Sandbox \
+            -Danypoint.private.space="${{ env.PRIVATE_SPACE }}" \
+            -Dcloudhub2.replicas=${{ env.CH2_REPLICAS }} \
+            -Dcloudhub2.vcores=${{ env.CH2_VCORES }}
+
+  # ---------------------------------------------------------------------------
+  # Job 4: Deploy the same artifact to CloudHub 2.0 Production.
+  # Gated by the 'production' GitHub Environment, which requires a reviewer
+  # approval before the job runs.
+  # Downloads the pre-built jar — no rebuild, no re-test.
+  # ---------------------------------------------------------------------------
+  deploy-production:
+    name: Deploy to Production
+    needs: deploy-sandbox
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: temurin
+
+      - name: Restore Maven cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-maven-
+
+      - name: Download application jar
+        uses: actions/download-artifact@v4
+        with:
+          name: app-jar
+          path: northbridge-aml-api/target/
+
+      - name: Deploy to CloudHub 2.0 Production
+        env:
+          ANYPOINT_CLIENT_ID: ${{ secrets.ANYPOINT_CLIENT_ID }}
+          ANYPOINT_CLIENT_SECRET: ${{ secrets.ANYPOINT_CLIENT_SECRET }}
+        run: |
+          mvn -B mule:deploy \
+            -f northbridge-aml-api/pom.xml \
+            -s settings.xml \
+            -Pcloudhub2 \
+            -Danypoint.org.id="${{ env.ANYPOINT_ORG_ID }}" \
+            -Danypoint.environment=Production \
+            -Danypoint.private.space="${{ env.PRIVATE_SPACE }}" \
+            -Dcloudhub2.replicas=${{ env.CH2_REPLICAS }} \
+            -Dcloudhub2.vcores=${{ env.CH2_VCORES }}
