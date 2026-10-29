@@ -33,7 +33,7 @@ on:
 env:
   JAVA_VERSION: '17'
   # Fill in your Anypoint organization ID (Access Management → Organization → Organization ID).
-  ANYPOINT_ORG_ID: __FILL_ME__ANYPOINT_ORG_ID__
+  ANYPOINT_ORG_ID: 0d2dd5dc-4a01-4180-a12a-0c3c4d888c7b
   # CloudHub 2.0 Private Space name (same for Sandbox and Production).
   PRIVATE_SPACE: mcp-private-space
   # [TBD] Set replica count and vCore size for each environment before the first deploy.
