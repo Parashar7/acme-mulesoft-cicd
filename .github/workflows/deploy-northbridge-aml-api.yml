@@ -1,8 +1,5 @@
 # Deploy pipeline for northbridge-aml-api
 # Stages: build → publish-to-exchange (non-blocking) → deploy-sandbox → deploy-production
-#
-# Exchange publish is continue-on-error so CloudHub deploys proceed even while
-# Exchange publish is being debugged.
 
 name: Deploy northbridge-aml-api
 
@@ -32,9 +29,6 @@ env:
   CH2_VCORES: '0.1'
 
 jobs:
-  # ---------------------------------------------------------------------------
-  # Job 1: Build and package. Does NOT receive deploy secrets.
-  # ---------------------------------------------------------------------------
   build:
     name: Build
     runs-on: ubuntu-latest
@@ -65,11 +59,6 @@ jobs:
           retention-days: 1
           if-no-files-found: error
 
-  # ---------------------------------------------------------------------------
-  # Job 2: Publish to Anypoint Exchange.
-  # continue-on-error: true — Exchange publish does not block CloudHub deploy.
-  # Tries the Exchange 2 REST API directly with a Bearer token.
-  # ---------------------------------------------------------------------------
   publish-to-exchange:
     name: Publish to Exchange
     needs: build
@@ -103,7 +92,6 @@ jobs:
 
           echo "Publishing ${JAR} as version ${VERSION} to org ${ORG}"
 
-          # Try Exchange 2 REST API (org-path variant)
           HTTP=$(curl -s -o /tmp/exchange-response.json -w "%{http_code}" \
             -X POST "https://anypoint.mulesoft.com/exchange/api/v2/organizations/${ORG}/assets" \
             -H "Authorization: Bearer ${ACCESS_TOKEN}" \
@@ -123,7 +111,6 @@ jobs:
             echo "Exchange publish succeeded"; exit 0
           fi
 
-          # Fallback: try without org prefix in URL
           HTTP2=$(curl -s -o /tmp/exchange-response2.json -w "%{http_code}" \
             -X POST "https://anypoint.mulesoft.com/exchange/api/v2/assets" \
             -H "Authorization: Bearer ${ACCESS_TOKEN}" \
@@ -141,11 +128,6 @@ jobs:
 
           [ "${HTTP2}" = "200" ] || [ "${HTTP2}" = "201" ] || { echo "Exchange publish failed (${HTTP} / ${HTTP2})"; exit 1; }
 
-  # ---------------------------------------------------------------------------
-  # Job 3: Deploy to CloudHub 2.0 Sandbox.
-  # Depends on build (NOT on publish-to-exchange) so it runs regardless of
-  # Exchange publish outcome.
-  # ---------------------------------------------------------------------------
   deploy-sandbox:
     name: Deploy to Sandbox
     needs: build
@@ -169,6 +151,14 @@ jobs:
           path: ~/.m2/repository
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
           restore-keys: ${{ runner.os }}-maven-
+      - name: Describe mule:deploy parameters
+        run: |
+          mvn -B help:describe \
+            -Dplugin=org.mule.tools.maven:mule-maven-plugin:4.10.3 \
+            -Dgoal=deploy \
+            -Ddetail=true \
+            -f northbridge-aml-api/pom.xml \
+            2>&1 | grep -E "name:|type:|Description:|deprecated" | head -60
       - name: Download application jar
         uses: actions/download-artifact@v4
         with:
@@ -212,10 +202,6 @@ jobs:
             -Dcloudhub2.replicas=${{ env.CH2_REPLICAS }} \
             -Dcloudhub2.vcores=${{ env.CH2_VCORES }}
 
-  # ---------------------------------------------------------------------------
-  # Job 4: Deploy to CloudHub 2.0 Production.
-  # Gated by the 'production' GitHub Environment (required reviewer).
-  # ---------------------------------------------------------------------------
   deploy-production:
     name: Deploy to Production
     needs: deploy-sandbox
