@@ -85,48 +85,30 @@ jobs:
             --data-urlencode "client_id=${ANYPOINT_CLIENT_ID}" \
             --data-urlencode "client_secret=${ANYPOINT_CLIENT_SECRET}" \
             | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
-
           JAR=$(find northbridge-aml-api/target -name '*-mule-application.jar' | head -1)
           VERSION=$(python3 -c "import xml.etree.ElementTree as ET; t=ET.parse('northbridge-aml-api/pom.xml'); ns={'m':'http://maven.apache.org/POM/4.0.0'}; print(t.find('m:version',ns).text)")
           ORG="${{ env.ANYPOINT_ORG_ID }}"
-
-          echo "Publishing ${JAR} as version ${VERSION} to org ${ORG}"
-
-          HTTP=$(curl -s -o /tmp/exchange-response.json -w "%{http_code}" \
+          echo "Publishing ${JAR} as version ${VERSION}"
+          HTTP=$(curl -s -o /tmp/ex-r.json -w "%{http_code}" \
             -X POST "https://anypoint.mulesoft.com/exchange/api/v2/organizations/${ORG}/assets" \
             -H "Authorization: Bearer ${ACCESS_TOKEN}" \
-            -F "organizationId=${ORG}" \
-            -F "groupId=${ORG}" \
-            -F "assetId=northbridge-aml-api" \
-            -F "version=${VERSION}" \
-            -F "name=northbridge-aml-api" \
-            -F "type=app" \
-            -F "classifier=mule-application" \
-            -F "packaging=jar" \
+            -F "organizationId=${ORG}" -F "groupId=${ORG}" \
+            -F "assetId=northbridge-aml-api" -F "version=${VERSION}" \
+            -F "name=northbridge-aml-api" -F "type=app" \
+            -F "classifier=mule-application" -F "packaging=jar" \
             -F "main=@${JAR};type=application/java-archive")
-          echo "Exchange /organizations/{orgId}/assets HTTP status: ${HTTP}"
-          cat /tmp/exchange-response.json; echo
-
-          if [ "${HTTP}" = "200" ] || [ "${HTTP}" = "201" ]; then
-            echo "Exchange publish succeeded"; exit 0
-          fi
-
-          HTTP2=$(curl -s -o /tmp/exchange-response2.json -w "%{http_code}" \
+          echo "status=${HTTP}"; cat /tmp/ex-r.json; echo
+          if [ "${HTTP}" = "200" ] || [ "${HTTP}" = "201" ]; then exit 0; fi
+          HTTP2=$(curl -s -o /tmp/ex-r2.json -w "%{http_code}" \
             -X POST "https://anypoint.mulesoft.com/exchange/api/v2/assets" \
             -H "Authorization: Bearer ${ACCESS_TOKEN}" \
-            -F "organizationId=${ORG}" \
-            -F "groupId=${ORG}" \
-            -F "assetId=northbridge-aml-api" \
-            -F "version=${VERSION}" \
-            -F "name=northbridge-aml-api" \
-            -F "type=app" \
-            -F "classifier=mule-application" \
-            -F "packaging=jar" \
+            -F "organizationId=${ORG}" -F "groupId=${ORG}" \
+            -F "assetId=northbridge-aml-api" -F "version=${VERSION}" \
+            -F "name=northbridge-aml-api" -F "type=app" \
+            -F "classifier=mule-application" -F "packaging=jar" \
             -F "main=@${JAR};type=application/java-archive")
-          echo "Exchange /assets HTTP status: ${HTTP2}"
-          cat /tmp/exchange-response2.json; echo
-
-          [ "${HTTP2}" = "200" ] || [ "${HTTP2}" = "201" ] || { echo "Exchange publish failed (${HTTP} / ${HTTP2})"; exit 1; }
+          echo "status2=${HTTP2}"; cat /tmp/ex-r2.json; echo
+          [ "${HTTP2}" = "200" ] || [ "${HTTP2}" = "201" ] || { echo "Exchange publish failed"; exit 1; }
 
   deploy-sandbox:
     name: Deploy to Sandbox
@@ -158,7 +140,9 @@ jobs:
             -Dgoal=deploy \
             -Ddetail=true \
             -f northbridge-aml-api/pom.xml \
-            2>&1 | grep -E "name:|type:|Description:|deprecated" | head -60
+            > /tmp/mule-deploy-describe.txt 2>&1 || true
+          echo '=== DEPLOY MOJO PARAMETERS ==='
+          cat /tmp/mule-deploy-describe.txt
       - name: Download application jar
         uses: actions/download-artifact@v4
         with:
