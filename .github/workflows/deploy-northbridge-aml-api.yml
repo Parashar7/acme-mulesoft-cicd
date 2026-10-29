@@ -1,10 +1,5 @@
 # Deploy pipeline for northbridge-aml-api
 # Stages: build → publish-to-exchange → deploy-sandbox → deploy-production
-#
-# Exchange publish uses 'mvn deploy' via the mule-maven-plugin (extensions=true)
-# which sends the correct Mule asset format that the Exchange Maven facade expects.
-# The deploy:deploy-file approach was abandoned because it sends a plain JAR
-# without Mule metadata, causing Exchange to reset the connection.
 
 name: Deploy northbridge-aml-api
 
@@ -34,9 +29,6 @@ env:
   CH2_VCORES: '0.1'
 
 jobs:
-  # ---------------------------------------------------------------------------
-  # Job 1: Build and package the application. No tests are run.
-  # ---------------------------------------------------------------------------
   build:
     name: Build
     runs-on: ubuntu-latest
@@ -68,9 +60,10 @@ jobs:
           if-no-files-found: error
 
   # ---------------------------------------------------------------------------
-  # Job 2: Publish to Anypoint Exchange via mule-maven-plugin deploy phase.
-  # Re-packages inline (fast, no Java compilation) so the plugin can attach
-  # the correct Mule asset metadata that Exchange requires.
+  # Job 2: Publish to Anypoint Exchange.
+  # Exchange requires groupId == org UUID. The exchange-mule-maven-plugin reads
+  # the 'exchange.groupId' property to override the POM groupId at publish time,
+  # so the local build can keep com.northbridge.bank as its coordinate.
   # ---------------------------------------------------------------------------
   publish-to-exchange:
     name: Publish to Exchange
@@ -132,22 +125,16 @@ jobs:
           print('Settings file written')
           PYEOF
       - name: Publish to Anypoint Exchange
-        # Uses 'mvn deploy' via the mule-maven-plugin (extensions=true). The plugin
-        # publishes the packaged Mule application to Exchange using the correct
-        # asset format. -DmuleDeploy=false prevents any CloudHub deployment attempt.
         env:
           ANYPOINT_CLIENT_ID: ${{ secrets.ANYPOINT_CLIENT_ID }}
           ANYPOINT_CLIENT_SECRET: ${{ secrets.ANYPOINT_CLIENT_SECRET }}
         run: |
           mvn -B deploy -DskipTests -DmuleDeploy=false \
             -Danypoint.org.id="${{ env.ANYPOINT_ORG_ID }}" \
+            -Dexchange.groupId="${{ env.ANYPOINT_ORG_ID }}" \
             -f northbridge-aml-api/pom.xml \
             -s /tmp/mvn-settings.xml
 
-  # ---------------------------------------------------------------------------
-  # Job 3: Deploy the published artifact to CloudHub 2.0 Sandbox.
-  # Downloads the pre-built jar — no recompilation.
-  # ---------------------------------------------------------------------------
   deploy-sandbox:
     name: Deploy to Sandbox
     needs: publish-to-exchange
@@ -213,10 +200,6 @@ jobs:
             -Dcloudhub2.replicas=${{ env.CH2_REPLICAS }} \
             -Dcloudhub2.vcores=${{ env.CH2_VCORES }}
 
-  # ---------------------------------------------------------------------------
-  # Job 4: Deploy the same artifact to CloudHub 2.0 Production.
-  # Gated by the 'production' GitHub Environment (required reviewer).
-  # ---------------------------------------------------------------------------
   deploy-production:
     name: Deploy to Production
     needs: deploy-sandbox
