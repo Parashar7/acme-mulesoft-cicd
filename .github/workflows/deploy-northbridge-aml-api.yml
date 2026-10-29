@@ -73,7 +73,8 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # Job 2: Publish the pre-built jar to Anypoint Exchange.
-  # Exchange only accepts RELEASE versions (not SNAPSHOT).
+  # maven-deploy-plugin 2.8.2 is pinned explicitly: in 3.x, -DgeneratePom=false
+  # no longer suppresses the POM upload and Exchange rejects it.
   # ---------------------------------------------------------------------------
   publish-to-exchange:
     name: Publish to Exchange
@@ -153,7 +154,7 @@ jobs:
         run: |
           JAR=$(find northbridge-aml-api/target -name '*-mule-application.jar' | head -1)
           echo "Publishing: ${JAR}"
-          mvn -B deploy:deploy-file \
+          mvn -B org.apache.maven.plugins:maven-deploy-plugin:2.8.2:deploy-file \
             -Dfile="${JAR}" \
             -DgroupId="${{ env.ANYPOINT_ORG_ID }}" \
             -DartifactId=northbridge-aml-api \
