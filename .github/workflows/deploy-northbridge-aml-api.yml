@@ -59,12 +59,6 @@ jobs:
           retention-days: 1
           if-no-files-found: error
 
-  # ---------------------------------------------------------------------------
-  # Job 2: Publish to Anypoint Exchange.
-  # Exchange requires groupId == org UUID. The exchange-mule-maven-plugin reads
-  # the 'exchange.groupId' property to override the POM groupId at publish time,
-  # so the local build can keep com.northbridge.bank as its coordinate.
-  # ---------------------------------------------------------------------------
   publish-to-exchange:
     name: Publish to Exchange
     needs: build
@@ -131,7 +125,6 @@ jobs:
         run: |
           mvn -B deploy -DskipTests -DmuleDeploy=false \
             -Danypoint.org.id="${{ env.ANYPOINT_ORG_ID }}" \
-            -Dexchange.groupId="${{ env.ANYPOINT_ORG_ID }}" \
             -f northbridge-aml-api/pom.xml \
             -s /tmp/mvn-settings.xml
 
