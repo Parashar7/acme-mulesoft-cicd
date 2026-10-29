@@ -22,6 +22,9 @@ on:
 
 env:
   JAVA_VERSION: '17'
+  # mule-maven-plugin 4.7.0 uses maven-resolver 1.x API which is incompatible with
+  # Maven 4 (maven-resolver 2.x). Pin to Maven 3.9.x until the plugin is updated.
+  MAVEN_VERSION: '3.9.9'
   ANYPOINT_ORG_ID: 0d2dd5dc-4a01-4180-a12a-0c3c4d888c7b
   PRIVATE_SPACE: mcp-private-space
   CH2_REPLICAS: 1
@@ -43,6 +46,12 @@ jobs:
         with:
           java-version: ${{ env.JAVA_VERSION }}
           distribution: temurin
+
+      - name: Install Maven ${{ env.MAVEN_VERSION }}
+        run: |
+          curl -fsSL https://archive.apache.org/dist/maven/maven-3/${{ env.MAVEN_VERSION }}/binaries/apache-maven-${{ env.MAVEN_VERSION }}-bin.tar.gz \
+            | tar xz -C /opt
+          echo "/opt/apache-maven-${{ env.MAVEN_VERSION }}/bin" >> "$GITHUB_PATH"
 
       - name: Restore Maven cache
         uses: actions/cache@v4
@@ -83,6 +92,12 @@ jobs:
         with:
           java-version: ${{ env.JAVA_VERSION }}
           distribution: temurin
+
+      - name: Install Maven ${{ env.MAVEN_VERSION }}
+        run: |
+          curl -fsSL https://archive.apache.org/dist/maven/maven-3/${{ env.MAVEN_VERSION }}/binaries/apache-maven-${{ env.MAVEN_VERSION }}-bin.tar.gz \
+            | tar xz -C /opt
+          echo "/opt/apache-maven-${{ env.MAVEN_VERSION }}/bin" >> "$GITHUB_PATH"
 
       - name: Restore Maven cache
         uses: actions/cache@v4
@@ -136,6 +151,12 @@ jobs:
           java-version: ${{ env.JAVA_VERSION }}
           distribution: temurin
 
+      - name: Install Maven ${{ env.MAVEN_VERSION }}
+        run: |
+          curl -fsSL https://archive.apache.org/dist/maven/maven-3/${{ env.MAVEN_VERSION }}/binaries/apache-maven-${{ env.MAVEN_VERSION }}-bin.tar.gz \
+            | tar xz -C /opt
+          echo "/opt/apache-maven-${{ env.MAVEN_VERSION }}/bin" >> "$GITHUB_PATH"
+
       - name: Restore Maven cache
         uses: actions/cache@v4
         with:
@@ -182,6 +203,12 @@ jobs:
         with:
           java-version: ${{ env.JAVA_VERSION }}
           distribution: temurin
+
+      - name: Install Maven ${{ env.MAVEN_VERSION }}
+        run: |
+          curl -fsSL https://archive.apache.org/dist/maven/maven-3/${{ env.MAVEN_VERSION }}/binaries/apache-maven-${{ env.MAVEN_VERSION }}-bin.tar.gz \
+            | tar xz -C /opt
+          echo "/opt/apache-maven-${{ env.MAVEN_VERSION }}/bin" >> "$GITHUB_PATH"
 
       - name: Restore Maven cache
         uses: actions/cache@v4
