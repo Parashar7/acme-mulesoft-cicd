@@ -142,43 +142,4 @@
       <url>https://repository.mulesoft.org/releases/</url>
     </pluginRepository>
   </pluginRepositories>
-
-  <!-- ================================================================
-       CloudHub 2.0 deployment profile.
-       Activated with -Pcloudhub2 on the Maven command line.
-       Credentials are read from environment variables injected by the
-       CI pipeline — they are never stored in this file.
-       ================================================================ -->
-  <profiles>
-    <profile>
-      <id>cloudhub2</id>
-      <build>
-        <plugins>
-          <plugin>
-            <groupId>org.mule.tools.maven</groupId>
-            <artifactId>mule-maven-plugin</artifactId>
-            <version>${mule.maven.plugin.version}</version>
-            <extensions>true</extensions>
-            <configuration>
-              <cloudHub2Deployment>
-                <uri>https://anypoint.mulesoft.com</uri>
-                <provider>MC</provider>
-                <environment>${anypoint.environment}</environment>
-                <target>${anypoint.private.space}</target>
-                <muleVersion>${app.runtime}</muleVersion>
-                <javaVersion>${java.version}</javaVersion>
-                <applicationName>${project.artifactId}</applicationName>
-                <replicas>${cloudhub2.replicas}</replicas>
-                <vCores>${cloudhub2.vcores}</vCores>
-                <connectedAppClientId>${env.ANYPOINT_CLIENT_ID}</connectedAppClientId>
-                <connectedAppClientSecret>${env.ANYPOINT_CLIENT_SECRET}</connectedAppClientSecret>
-                <connectedAppGrantType>client_credentials</connectedAppGrantType>
-                <businessGroupId>${anypoint.org.id}</businessGroupId>
-              </cloudHub2Deployment>
-            </configuration>
-          </plugin>
-        </plugins>
-      </build>
-    </profile>
-  </profiles>
 </project>
