@@ -80,13 +80,11 @@ jobs:
           path: ~/.m2/repository
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
           restore-keys: ${{ runner.os }}-maven-
-      - name: Verify credentials (token endpoint check)
+      - name: Verify credentials
         env:
           ANYPOINT_CLIENT_ID: ${{ secrets.ANYPOINT_CLIENT_ID }}
           ANYPOINT_CLIENT_SECRET: ${{ secrets.ANYPOINT_CLIENT_SECRET }}
         run: |
-          echo "Client ID length : ${#ANYPOINT_CLIENT_ID}"
-          echo "Client Secret length: ${#ANYPOINT_CLIENT_SECRET}"
           HTTP=$(curl -s -o /tmp/tok.json -w "%{http_code}" \
             -X POST "https://anypoint.mulesoft.com/accounts/api/v2/oauth2/token" \
             -H "Content-Type: application/x-www-form-urlencoded" \
@@ -94,8 +92,7 @@ jobs:
             --data-urlencode "client_id=${ANYPOINT_CLIENT_ID}" \
             --data-urlencode "client_secret=${ANYPOINT_CLIENT_SECRET}")
           echo "Token endpoint status: ${HTTP}"
-          python3 -c "import json; d=json.load(open('/tmp/tok.json')); print('token_type:', d.get('token_type','N/A'), '| scope:', d.get('scope','N/A'))" 2>/dev/null || cat /tmp/tok.json
-          [ "${HTTP}" = "200" ] || { echo "Credentials rejected by token endpoint"; exit 1; }
+          [ "${HTTP}" = "200" ] || { echo "Credentials rejected"; exit 1; }
       - name: Write Maven settings
         env:
           ANYPOINT_CLIENT_ID: ${{ secrets.ANYPOINT_CLIENT_ID }}
@@ -121,7 +118,7 @@ jobs:
           ANYPOINT_CLIENT_ID: ${{ secrets.ANYPOINT_CLIENT_ID }}
           ANYPOINT_CLIENT_SECRET: ${{ secrets.ANYPOINT_CLIENT_SECRET }}
         run: |
-          mvn -B package mule:deploy -DskipTests \
+          mvn -B -e package mule:deploy -DskipTests \
             -f northbridge-aml-api/pom.xml \
             -s /tmp/mvn-settings.xml \
             -Danypoint.org.id="${{ env.ANYPOINT_ORG_ID }}" \
@@ -177,7 +174,7 @@ jobs:
           ANYPOINT_CLIENT_ID: ${{ secrets.ANYPOINT_CLIENT_ID }}
           ANYPOINT_CLIENT_SECRET: ${{ secrets.ANYPOINT_CLIENT_SECRET }}
         run: |
-          mvn -B package mule:deploy -DskipTests \
+          mvn -B -e package mule:deploy -DskipTests \
             -f northbridge-aml-api/pom.xml \
             -s /tmp/mvn-settings.xml \
             -Danypoint.org.id="${{ env.ANYPOINT_ORG_ID }}" \
