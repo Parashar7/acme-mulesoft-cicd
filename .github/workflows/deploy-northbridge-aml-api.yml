@@ -1,9 +1,5 @@
 # Deploy pipeline for northbridge-aml-api
 # Stages: build → deploy-sandbox → deploy-production
-#
-# Authentication: each GitHub Environment stores the Anypoint environment's
-# own client credentials (from Runtime Manager → Environments → Client ID/Secret).
-# These have native CloudHub 2.0 deploy permission for their environment.
 
 name: Deploy northbridge-aml-api
 
@@ -31,9 +27,6 @@ env:
   CH2_VCORES: '0.1'
 
 jobs:
-  # ---------------------------------------------------------------------------
-  # Job 1: Build and package. No tests. Does NOT receive deploy secrets.
-  # ---------------------------------------------------------------------------
   build:
     name: Build
     runs-on: ubuntu-latest
@@ -64,12 +57,6 @@ jobs:
           retention-days: 1
           if-no-files-found: error
 
-  # ---------------------------------------------------------------------------
-  # Job 2: Deploy to CloudHub 2.0 Sandbox.
-  # Secrets: ANYPOINT_CLIENT_ID / ANYPOINT_CLIENT_SECRET in the 'sandbox'
-  # GitHub Environment must hold the Sandbox environment's client credentials
-  # (Anypoint Runtime Manager → Environments → Sandbox → Client ID / Secret).
-  # ---------------------------------------------------------------------------
   deploy-sandbox:
     name: Deploy to Sandbox
     needs: build
@@ -93,6 +80,22 @@ jobs:
           path: ~/.m2/repository
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
           restore-keys: ${{ runner.os }}-maven-
+      - name: Verify credentials (token endpoint check)
+        env:
+          ANYPOINT_CLIENT_ID: ${{ secrets.ANYPOINT_CLIENT_ID }}
+          ANYPOINT_CLIENT_SECRET: ${{ secrets.ANYPOINT_CLIENT_SECRET }}
+        run: |
+          echo "Client ID length : ${#ANYPOINT_CLIENT_ID}"
+          echo "Client Secret length: ${#ANYPOINT_CLIENT_SECRET}"
+          HTTP=$(curl -s -o /tmp/tok.json -w "%{http_code}" \
+            -X POST "https://anypoint.mulesoft.com/accounts/api/v2/oauth2/token" \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            --data-urlencode "grant_type=client_credentials" \
+            --data-urlencode "client_id=${ANYPOINT_CLIENT_ID}" \
+            --data-urlencode "client_secret=${ANYPOINT_CLIENT_SECRET}")
+          echo "Token endpoint status: ${HTTP}"
+          python3 -c "import json; d=json.load(open('/tmp/tok.json')); print('token_type:', d.get('token_type','N/A'), '| scope:', d.get('scope','N/A'))" 2>/dev/null || cat /tmp/tok.json
+          [ "${HTTP}" = "200" ] || { echo "Credentials rejected by token endpoint"; exit 1; }
       - name: Write Maven settings
         env:
           ANYPOINT_CLIENT_ID: ${{ secrets.ANYPOINT_CLIENT_ID }}
@@ -127,11 +130,6 @@ jobs:
             -Dcloudhub2.replicas=${{ env.CH2_REPLICAS }} \
             -Dcloudhub2.vcores=${{ env.CH2_VCORES }}
 
-  # ---------------------------------------------------------------------------
-  # Job 3: Deploy to CloudHub 2.0 Production.
-  # Gated by the 'production' GitHub Environment (required reviewer).
-  # Secrets: the Production environment's client credentials.
-  # ---------------------------------------------------------------------------
   deploy-production:
     name: Deploy to Production
     needs: deploy-sandbox
