@@ -22,7 +22,8 @@ env:
   JAVA_VERSION: '17'
   MAVEN_VERSION: '3.9.9'
   ANYPOINT_ORG_ID: 0d2dd5dc-4a01-4180-a12a-0c3c4d888c7b
-  PRIVATE_SPACE: mcp-private-space
+  # CloudHub 2.0 Shared Space – US East (Ohio)
+  DEPLOY_TARGET: 'US East (Ohio)'
   CH2_REPLICAS: 1
   CH2_VCORES: '0.1'
 
@@ -123,7 +124,7 @@ jobs:
             -s /tmp/mvn-settings.xml \
             -Danypoint.org.id="${{ env.ANYPOINT_ORG_ID }}" \
             -Danypoint.environment=Sandbox \
-            -Danypoint.private.space="${{ env.PRIVATE_SPACE }}" \
+            -Danypoint.private.space="${{ env.DEPLOY_TARGET }}" \
             -Dcloudhub2.replicas=${{ env.CH2_REPLICAS }} \
             -Dcloudhub2.vcores=${{ env.CH2_VCORES }}
 
@@ -179,6 +180,6 @@ jobs:
             -s /tmp/mvn-settings.xml \
             -Danypoint.org.id="${{ env.ANYPOINT_ORG_ID }}" \
             -Danypoint.environment=Production \
-            -Danypoint.private.space="${{ env.PRIVATE_SPACE }}" \
+            -Danypoint.private.space="${{ env.DEPLOY_TARGET }}" \
             -Dcloudhub2.replicas=${{ env.CH2_REPLICAS }} \
             -Dcloudhub2.vcores=${{ env.CH2_VCORES }}
