@@ -80,7 +80,7 @@ jobs:
           path: ~/.m2/repository
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
           restore-keys: ${{ runner.os }}-maven-
-      - name: List available deployment targets
+      - name: List available deployment targets (raw JSON)
         env:
           ANYPOINT_CLIENT_ID: ${{ secrets.ANYPOINT_CLIENT_ID }}
           ANYPOINT_CLIENT_SECRET: ${{ secrets.ANYPOINT_CLIENT_SECRET }}
@@ -93,14 +93,21 @@ jobs:
             | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
           ORG="${{ env.ANYPOINT_ORG_ID }}"
           ENV="${{ env.SANDBOX_ENV_ID }}"
-          echo "=== Fabrics (org-level) ==="
+          echo "=== /runtimefabric/api/v1/organizations/{org}/fabrics ==="
           curl -s -H "Authorization: Bearer ${TOKEN}" \
             "https://anypoint.mulesoft.com/runtimefabric/api/v1/organizations/${ORG}/fabrics" \
-            | python3 -c "import sys,json; d=json.load(sys.stdin); items=d if isinstance(d,list) else d.get('data',d.get('fabrics',[])); [print(i.get('name','?'), '|', i.get('id','?'), '|', i.get('region','?')) for i in items]" 2>/dev/null || echo 'fabrics endpoint failed'
-          echo "=== Targets (env-level) ==="
+            | head -c 2000
+          echo
+          echo "=== /amc/.../targets ==="
           curl -s -H "Authorization: Bearer ${TOKEN}" \
             "https://anypoint.mulesoft.com/amc/application-manager/api/v2/organizations/${ORG}/environments/${ENV}/targets" \
-            | python3 -c "import sys,json; d=json.load(sys.stdin); items=d if isinstance(d,list) else d.get('data',d.get('targets',[])); [print(i.get('name','?'), '|', i.get('id','?'), '|', i.get('targetId','?')) for i in items]" 2>/dev/null || echo 'targets endpoint failed'
+            | head -c 2000
+          echo
+          echo "=== /cloudhub/api/v2/regions ==="
+          curl -s -H "Authorization: Bearer ${TOKEN}" \
+            "https://anypoint.mulesoft.com/cloudhub/api/v2/regions" \
+            | head -c 2000
+          echo
       - name: Write Maven settings
         env:
           ANYPOINT_CLIENT_ID: ${{ secrets.ANYPOINT_CLIENT_ID }}
