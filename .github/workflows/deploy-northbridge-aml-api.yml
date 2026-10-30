@@ -148,41 +148,32 @@ jobs:
 import sys, base64, json
 tok = sys.stdin.read().strip()
 payload = tok.split('.')[1]
-padding = 4 - len(payload) % 4
-if padding != 4:
-    payload += '=' * padding
-claims = json.loads(base64.b64decode(payload))
-print('scope:', claims.get('scope','N/A'))
-print('client_id:', claims.get('client_id','N/A'))
+pad = 4 - len(payload) % 4
+if pad != 4: payload += '=' * pad
+c = json.loads(base64.b64decode(payload))
+print('scope:', c.get('scope','N/A'))
+print('client:', c.get('client_id','N/A'))
 "
-          echo "=== Environments accessible to this token ==="
-          curl -s \
-            -H "Authorization: Bearer ${TOKEN}" \
-            "https://anypoint.mulesoft.com/accounts/api/organizations/${{ env.ANYPOINT_ORG_ID }}/environments" \
-            | python3 -c "import sys,json; d=json.load(sys.stdin); [print(e['id'], e['name']) for e in d.get('data',[])]" 2>/dev/null || echo 'env list failed'
       - name: Write Maven settings
         env:
           ANYPOINT_CLIENT_ID: ${{ secrets.ANYPOINT_CLIENT_ID }}
           ANYPOINT_CLIENT_SECRET: ${{ secrets.ANYPOINT_CLIENT_SECRET }}
         run: |
-          python3 -c "
-import os
-cid = os.environ['ANYPOINT_CLIENT_ID']
-cs  = os.environ['ANYPOINT_CLIENT_SECRET']
-xml = '''<?xml version=\"1.0\" encoding=\"UTF-8\"?>
-<settings xmlns=\"http://maven.apache.org/SETTINGS/1.2.0\">
-  <servers>
-    <server>
-      <id>anypoint-exchange-v3</id>
-      <username>~~~Client~~~</username>
-      <password>{cid}~?~{cs}</password>
-    </server>
-  </servers>
-</settings>
-'''.format(cid=cid, cs=cs)
-open('/tmp/mvn-settings.xml', 'w').write(xml)
-print('Settings file written')
-"
+          python3 - <<'PYEOF'
+          import os
+          cid = os.environ['ANYPOINT_CLIENT_ID']
+          cs  = os.environ['ANYPOINT_CLIENT_SECRET']
+          xml = ('<?xml version="1.0" encoding="UTF-8"?>\n'
+                 '<settings xmlns="http://maven.apache.org/SETTINGS/1.2.0">\n'
+                 '  <servers><server>\n'
+                 '    <id>anypoint-exchange-v3</id>\n'
+                 '    <username>~~~Client~~~</username>\n'
+                 f'    <password>{cid}~?~{cs}</password>\n'
+                 '  </server></servers>\n'
+                 '</settings>\n')
+          open('/tmp/mvn-settings.xml', 'w').write(xml)
+          print('Settings written')
+          PYEOF
       - name: Package and deploy to CloudHub 2.0 Sandbox
         env:
           ANYPOINT_CLIENT_ID: ${{ secrets.ANYPOINT_CLIENT_ID }}
@@ -224,24 +215,21 @@ print('Settings file written')
           ANYPOINT_CLIENT_ID: ${{ secrets.ANYPOINT_CLIENT_ID }}
           ANYPOINT_CLIENT_SECRET: ${{ secrets.ANYPOINT_CLIENT_SECRET }}
         run: |
-          python3 -c "
-import os
-cid = os.environ['ANYPOINT_CLIENT_ID']
-cs  = os.environ['ANYPOINT_CLIENT_SECRET']
-xml = '''<?xml version=\"1.0\" encoding=\"UTF-8\"?>
-<settings xmlns=\"http://maven.apache.org/SETTINGS/1.2.0\">
-  <servers>
-    <server>
-      <id>anypoint-exchange-v3</id>
-      <username>~~~Client~~~</username>
-      <password>{cid}~?~{cs}</password>
-    </server>
-  </servers>
-</settings>
-'''.format(cid=cid, cs=cs)
-open('/tmp/mvn-settings.xml', 'w').write(xml)
-print('Settings file written')
-"
+          python3 - <<'PYEOF'
+          import os
+          cid = os.environ['ANYPOINT_CLIENT_ID']
+          cs  = os.environ['ANYPOINT_CLIENT_SECRET']
+          xml = ('<?xml version="1.0" encoding="UTF-8"?>\n'
+                 '<settings xmlns="http://maven.apache.org/SETTINGS/1.2.0">\n'
+                 '  <servers><server>\n'
+                 '    <id>anypoint-exchange-v3</id>\n'
+                 '    <username>~~~Client~~~</username>\n'
+                 f'    <password>{cid}~?~{cs}</password>\n'
+                 '  </server></servers>\n'
+                 '</settings>\n')
+          open('/tmp/mvn-settings.xml', 'w').write(xml)
+          print('Settings written')
+          PYEOF
       - name: Package and deploy to CloudHub 2.0 Production
         env:
           ANYPOINT_CLIENT_ID: ${{ secrets.ANYPOINT_CLIENT_ID }}
