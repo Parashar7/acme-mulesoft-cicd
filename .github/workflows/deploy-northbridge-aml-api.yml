@@ -1,4 +1,8 @@
 # Deploy pipeline for northbridge-aml-api
+# Stages: build → deploy-sandbox → deploy-production
+#
+# Target is set in the app POM as <target>Cloudhub-US-East-1</target>
+# (CloudHub 2.0 Shared Space – US East Ohio).
 
 name: Deploy northbridge-aml-api
 
@@ -21,8 +25,6 @@ env:
   JAVA_VERSION: '17'
   MAVEN_VERSION: '3.9.9'
   ANYPOINT_ORG_ID: 0d2dd5dc-4a01-4180-a12a-0c3c4d888c7b
-  SANDBOX_ENV_ID: 575cf80f-c1a2-4586-8131-6e245fd91d33
-  DEPLOY_TARGET: 'Shared Space'
   CH2_REPLICAS: 1
   CH2_VCORES: '0.1'
 
@@ -57,6 +59,12 @@ jobs:
           retention-days: 1
           if-no-files-found: error
 
+  # ---------------------------------------------------------------------------
+  # Job 2: Deploy to CloudHub 2.0 Sandbox.
+  # Secrets: ANYPOINT_CLIENT_ID / ANYPOINT_CLIENT_SECRET in the 'sandbox'
+  # GitHub Environment — Connected App with Create/Read Applications scopes.
+  # Target is taken from the app POM: Cloudhub-US-East-1 (Shared Space).
+  # ---------------------------------------------------------------------------
   deploy-sandbox:
     name: Deploy to Sandbox
     needs: build
@@ -100,21 +108,23 @@ jobs:
           open('/tmp/mvn-settings.xml', 'w').write(xml)
           print('Settings written')
           PYEOF
-      - name: Deploy to CloudHub 2.0 Sandbox (debug)
+      - name: Deploy to CloudHub 2.0 Sandbox
         env:
           ANYPOINT_CLIENT_ID: ${{ secrets.ANYPOINT_CLIENT_ID }}
           ANYPOINT_CLIENT_SECRET: ${{ secrets.ANYPOINT_CLIENT_SECRET }}
         run: |
-          mvn -B -e -X package mule:deploy -DskipTests \
+          mvn -B package mule:deploy -DskipTests \
             -f northbridge-aml-api/pom.xml \
             -s /tmp/mvn-settings.xml \
             -Danypoint.org.id="${{ env.ANYPOINT_ORG_ID }}" \
             -Danypoint.environment=Sandbox \
-            -Danypoint.private.space="${{ env.DEPLOY_TARGET }}" \
             -Dcloudhub2.replicas=${{ env.CH2_REPLICAS }} \
-            -Dcloudhub2.vcores=${{ env.CH2_VCORES }} \
-            2>&1 | grep -E "GET|POST|PUT|runtimefabric|fabric|target|Target|GET http|Sending" | head -30
+            -Dcloudhub2.vcores=${{ env.CH2_VCORES }}
 
+  # ---------------------------------------------------------------------------
+  # Job 3: Deploy to CloudHub 2.0 Production.
+  # Gated by the 'production' GitHub Environment (required reviewer).
+  # ---------------------------------------------------------------------------
   deploy-production:
     name: Deploy to Production
     needs: deploy-sandbox
@@ -162,11 +172,10 @@ jobs:
           ANYPOINT_CLIENT_ID: ${{ secrets.ANYPOINT_CLIENT_ID }}
           ANYPOINT_CLIENT_SECRET: ${{ secrets.ANYPOINT_CLIENT_SECRET }}
         run: |
-          mvn -B -e package mule:deploy -DskipTests \
+          mvn -B package mule:deploy -DskipTests \
             -f northbridge-aml-api/pom.xml \
             -s /tmp/mvn-settings.xml \
             -Danypoint.org.id="${{ env.ANYPOINT_ORG_ID }}" \
             -Danypoint.environment=Production \
-            -Danypoint.private.space="${{ env.DEPLOY_TARGET }}" \
             -Dcloudhub2.replicas=${{ env.CH2_REPLICAS }} \
             -Dcloudhub2.vcores=${{ env.CH2_VCORES }}

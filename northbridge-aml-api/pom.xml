@@ -12,8 +12,7 @@
     <relativePath>../mule-parent-pom/pom.xml</relativePath>
   </parent>
 
-  <!-- groupId == Anypoint org UUID (Exchange requirement). Value comes from
-       anypoint.org.id in the parent POM. -->
+  <!-- groupId == Anypoint org UUID (Exchange requirement). -->
   <groupId>${anypoint.org.id}</groupId>
   <artifactId>northbridge-aml-api</artifactId>
   <version>1.0.5</version>
@@ -27,11 +26,6 @@
 
   <build>
     <plugins>
-      <!--
-        cloudhub2Deployment is in the base config so mule:deploy (standalone goal)
-        always finds it. The parameter name in mule-maven-plugin 4.10.3 is
-        'cloudhub2Deployment' (all lowercase), not 'cloudHub2Deployment'.
-      -->
       <plugin>
         <groupId>org.mule.tools.maven</groupId>
         <artifactId>mule-maven-plugin</artifactId>
@@ -43,7 +37,8 @@
             <uri>https://anypoint.mulesoft.com</uri>
             <provider>MC</provider>
             <environment>${anypoint.environment}</environment>
-            <target>${anypoint.private.space}</target>
+            <!-- CloudHub 2.0 Shared Space – US East (Ohio) -->
+            <target>Cloudhub-US-East-1</target>
             <muleVersion>${app.runtime}</muleVersion>
             <javaVersion>${java.version}</javaVersion>
             <applicationName>${project.artifactId}</applicationName>
