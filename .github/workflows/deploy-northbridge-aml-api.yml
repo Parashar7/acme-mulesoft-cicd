@@ -1,5 +1,4 @@
 # Deploy pipeline for northbridge-aml-api
-# Stages: build → publish-to-exchange (non-blocking) → deploy-sandbox → deploy-production
 
 name: Deploy northbridge-aml-api
 
@@ -59,9 +58,6 @@ jobs:
           retention-days: 1
           if-no-files-found: error
 
-  # ---------------------------------------------------------------------------
-  # Job 2: Publish to Anypoint Exchange (non-blocking).
-  # ---------------------------------------------------------------------------
   publish-to-exchange:
     name: Publish to Exchange
     needs: build
@@ -91,7 +87,6 @@ jobs:
           JAR=$(find northbridge-aml-api/target -name '*-mule-application.jar' | head -1)
           VERSION=$(python3 -c "import xml.etree.ElementTree as ET; t=ET.parse('northbridge-aml-api/pom.xml'); ns={'m':'http://maven.apache.org/POM/4.0.0'}; print(t.find('m:version',ns).text)")
           ORG="${{ env.ANYPOINT_ORG_ID }}"
-          echo "Publishing ${JAR} as version ${VERSION}"
           HTTP=$(curl -s -o /tmp/ex-r.json -w "%{http_code}" \
             -X POST "https://anypoint.mulesoft.com/exchange/api/v2/organizations/${ORG}/assets" \
             -H "Authorization: Bearer ${ACCESS_TOKEN}" \
@@ -113,12 +108,6 @@ jobs:
           echo "status2=${HTTP2}"; cat /tmp/ex-r2.json; echo
           [ "${HTTP2}" = "200" ] || [ "${HTTP2}" = "201" ] || { echo "Exchange publish failed"; exit 1; }
 
-  # ---------------------------------------------------------------------------
-  # Job 3: Deploy to CloudHub 2.0 Sandbox.
-  # mvn package -DskipTests runs first so project.artifact is non-null when
-  # mule:deploy reads it. Re-packaging is fast (~20s, no Java compilation).
-  # Connected App needs 'Cloudhub Application' scope for this step.
-  # ---------------------------------------------------------------------------
   deploy-sandbox:
     name: Deploy to Sandbox
     needs: build
@@ -142,6 +131,56 @@ jobs:
           path: ~/.m2/repository
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
           restore-keys: ${{ runner.os }}-maven-
+      - name: Inspect token scopes
+        # Decodes the JWT payload (no secret needed) to show what scopes are granted.
+        # Credentials are never printed.
+        env:
+          ANYPOINT_CLIENT_ID: ${{ secrets.ANYPOINT_CLIENT_ID }}
+          ANYPOINT_CLIENT_SECRET: ${{ secrets.ANYPOINT_CLIENT_SECRET }}
+        run: |
+          TOKEN=$(curl -sf \
+            -X POST "https://anypoint.mulesoft.com/accounts/api/v2/oauth2/token" \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            --data-urlencode "grant_type=client_credentials" \
+            --data-urlencode "client_id=${ANYPOINT_CLIENT_ID}" \
+            --data-urlencode "client_secret=${ANYPOINT_CLIENT_SECRET}" \
+            | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+          echo "=== Token JWT payload (scopes / claims) ==="
+          python3 - <<'PYEOF'
+          import os, base64, json, sys
+          # Read the token from the environment variable set above
+          import subprocess
+          # We already have TOKEN in shell; pass it via env
+          PYEOF
+          python3 -c "
+import base64, json, sys
+tok = open('/tmp/_tok').read().strip()
+payload = tok.split('.')[1]
+padding = 4 - len(payload) % 4
+if padding != 4: payload += '=' * padding
+claims = json.loads(base64.b64decode(payload))
+print('scope :', claims.get('scope', 'N/A'))
+print('client:', claims.get('client_id', 'N/A'))
+print('iss   :', claims.get('iss', 'N/A'))
+" 2>/dev/null || (
+            echo "${TOKEN}" > /tmp/_tok
+            python3 -c "
+import base64, json
+tok = open('/tmp/_tok').read().strip()
+payload = tok.split('.')[1]
+padding = 4 - len(payload) % 4
+if padding != 4: payload += '=' * padding
+claims = json.loads(base64.b64decode(payload))
+print('scope :', claims.get('scope', 'N/A'))
+print('client:', claims.get('client_id', 'N/A'))
+"
+          )
+          echo "=== Read deployments (GET, to check read access) ==="
+          ENV_ID=$(curl -sf \
+            -H "Authorization: Bearer ${TOKEN}" \
+            "https://anypoint.mulesoft.com/accounts/api/organizations/${{ env.ANYPOINT_ORG_ID }}/environments" \
+            | python3 -c "import sys,json; envs=json.load(sys.stdin).get('data',[]); [print(e['id'],e['name']) for e in envs]" 2>/dev/null || echo 'env list failed')
+          echo "Environments: ${ENV_ID}"
       - name: Write Maven settings
         env:
           ANYPOINT_CLIENT_ID: ${{ secrets.ANYPOINT_CLIENT_ID }}
@@ -179,10 +218,6 @@ jobs:
             -Dcloudhub2.replicas=${{ env.CH2_REPLICAS }} \
             -Dcloudhub2.vcores=${{ env.CH2_VCORES }}
 
-  # ---------------------------------------------------------------------------
-  # Job 4: Deploy to CloudHub 2.0 Production.
-  # Gated by the 'production' GitHub Environment (required reviewer).
-  # ---------------------------------------------------------------------------
   deploy-production:
     name: Deploy to Production
     needs: deploy-sandbox
