@@ -22,8 +22,8 @@ env:
   JAVA_VERSION: '17'
   MAVEN_VERSION: '3.9.9'
   ANYPOINT_ORG_ID: 0d2dd5dc-4a01-4180-a12a-0c3c4d888c7b
-  # CloudHub 2.0 Shared Space – US East (Ohio)
-  DEPLOY_TARGET: 'US East (Ohio)'
+  # CloudHub 2.0 Shared Space target name (all shared spaces are 'Shared Space' in the API)
+  DEPLOY_TARGET: 'Shared Space'
   CH2_REPLICAS: 1
   CH2_VCORES: '0.1'
 
