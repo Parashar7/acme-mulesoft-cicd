@@ -1,4 +1,9 @@
 # Deploy pipeline for northbridge-aml-api
+# Stages: build → deploy-sandbox → deploy-production
+#
+# Authentication: each GitHub Environment stores the Anypoint environment's
+# own client credentials (from Runtime Manager → Environments → Client ID/Secret).
+# These have native CloudHub 2.0 deploy permission for their environment.
 
 name: Deploy northbridge-aml-api
 
@@ -8,14 +13,12 @@ on:
     paths:
       - 'northbridge-aml-api/**'
       - 'mule-parent-pom/**'
-      - 'settings.xml'
       - '.github/workflows/deploy-northbridge-aml-api.yml'
   pull_request:
     branches: [main]
     paths:
       - 'northbridge-aml-api/**'
       - 'mule-parent-pom/**'
-      - 'settings.xml'
       - '.github/workflows/deploy-northbridge-aml-api.yml'
   workflow_dispatch:
 
@@ -26,9 +29,11 @@ env:
   PRIVATE_SPACE: mcp-private-space
   CH2_REPLICAS: 1
   CH2_VCORES: '0.1'
-  SANDBOX_ENV_ID: 575cf80f-c1a2-4586-8131-6e245fd91d33
 
 jobs:
+  # ---------------------------------------------------------------------------
+  # Job 1: Build and package. No tests. Does NOT receive deploy secrets.
+  # ---------------------------------------------------------------------------
   build:
     name: Build
     runs-on: ubuntu-latest
@@ -59,56 +64,12 @@ jobs:
           retention-days: 1
           if-no-files-found: error
 
-  publish-to-exchange:
-    name: Publish to Exchange
-    needs: build
-    if: github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
-    environment: sandbox
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@v4
-      - name: Download application jar
-        uses: actions/download-artifact@v4
-        with:
-          name: app-jar
-          path: northbridge-aml-api/target/
-      - name: Publish to Anypoint Exchange
-        env:
-          ANYPOINT_CLIENT_ID: ${{ secrets.ANYPOINT_CLIENT_ID }}
-          ANYPOINT_CLIENT_SECRET: ${{ secrets.ANYPOINT_CLIENT_SECRET }}
-        run: |
-          ACCESS_TOKEN=$(curl -sf \
-            -X POST "https://anypoint.mulesoft.com/accounts/api/v2/oauth2/token" \
-            -H "Content-Type: application/x-www-form-urlencoded" \
-            --data-urlencode "grant_type=client_credentials" \
-            --data-urlencode "client_id=${ANYPOINT_CLIENT_ID}" \
-            --data-urlencode "client_secret=${ANYPOINT_CLIENT_SECRET}" \
-            | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
-          JAR=$(find northbridge-aml-api/target -name '*-mule-application.jar' | head -1)
-          VERSION=$(python3 -c "import xml.etree.ElementTree as ET; t=ET.parse('northbridge-aml-api/pom.xml'); ns={'m':'http://maven.apache.org/POM/4.0.0'}; print(t.find('m:version',ns).text)")
-          ORG="${{ env.ANYPOINT_ORG_ID }}"
-          HTTP=$(curl -s -o /tmp/ex-r.json -w "%{http_code}" \
-            -X POST "https://anypoint.mulesoft.com/exchange/api/v2/organizations/${ORG}/assets" \
-            -H "Authorization: Bearer ${ACCESS_TOKEN}" \
-            -F "organizationId=${ORG}" -F "groupId=${ORG}" \
-            -F "assetId=northbridge-aml-api" -F "version=${VERSION}" \
-            -F "name=northbridge-aml-api" -F "type=app" \
-            -F "classifier=mule-application" -F "packaging=jar" \
-            -F "main=@${JAR};type=application/java-archive")
-          echo "status=${HTTP}"; cat /tmp/ex-r.json; echo
-          if [ "${HTTP}" = "200" ] || [ "${HTTP}" = "201" ]; then exit 0; fi
-          HTTP2=$(curl -s -o /tmp/ex-r2.json -w "%{http_code}" \
-            -X POST "https://anypoint.mulesoft.com/exchange/api/v2/assets" \
-            -H "Authorization: Bearer ${ACCESS_TOKEN}" \
-            -F "organizationId=${ORG}" -F "groupId=${ORG}" \
-            -F "assetId=northbridge-aml-api" -F "version=${VERSION}" \
-            -F "name=northbridge-aml-api" -F "type=app" \
-            -F "classifier=mule-application" -F "packaging=jar" \
-            -F "main=@${JAR};type=application/java-archive")
-          echo "status2=${HTTP2}"; cat /tmp/ex-r2.json; echo
-          [ "${HTTP2}" = "200" ] || [ "${HTTP2}" = "201" ] || { echo "Exchange publish failed"; exit 1; }
-
+  # ---------------------------------------------------------------------------
+  # Job 2: Deploy to CloudHub 2.0 Sandbox.
+  # Secrets: ANYPOINT_CLIENT_ID / ANYPOINT_CLIENT_SECRET in the 'sandbox'
+  # GitHub Environment must hold the Sandbox environment's client credentials
+  # (Anypoint Runtime Manager → Environments → Sandbox → Client ID / Secret).
+  # ---------------------------------------------------------------------------
   deploy-sandbox:
     name: Deploy to Sandbox
     needs: build
@@ -132,29 +93,6 @@ jobs:
           path: ~/.m2/repository
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
           restore-keys: ${{ runner.os }}-maven-
-      - name: Check deployment endpoint access
-        env:
-          ANYPOINT_CLIENT_ID: ${{ secrets.ANYPOINT_CLIENT_ID }}
-          ANYPOINT_CLIENT_SECRET: ${{ secrets.ANYPOINT_CLIENT_SECRET }}
-        run: |
-          TOKEN=$(curl -sf -X POST "https://anypoint.mulesoft.com/accounts/api/v2/oauth2/token" \
-            -H "Content-Type: application/x-www-form-urlencoded" \
-            --data-urlencode "grant_type=client_credentials" \
-            --data-urlencode "client_id=${ANYPOINT_CLIENT_ID}" \
-            --data-urlencode "client_secret=${ANYPOINT_CLIENT_SECRET}" \
-            | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
-          ORG="${{ env.ANYPOINT_ORG_ID }}"
-          ENV_ID="${{ env.SANDBOX_ENV_ID }}"
-          echo "=== GET deployments (read check) ==="
-          GET_STATUS=$(curl -s -o /tmp/dep-get.json -w "%{http_code}" \
-            -H "Authorization: Bearer ${TOKEN}" \
-            "https://anypoint.mulesoft.com/amc/application-manager/api/v2/organizations/${ORG}/environments/${ENV_ID}/deployments")
-          echo "GET /deployments status: ${GET_STATUS}"
-          cat /tmp/dep-get.json | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps(d,indent=2))" 2>/dev/null | head -20
-          echo "=== Connected App info ==="
-          curl -s -H "Authorization: Bearer ${TOKEN}" \
-            "https://anypoint.mulesoft.com/accounts/api/v2/oauth2/userinfo" \
-            | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps(d,indent=2))" 2>/dev/null | head -20
       - name: Write Maven settings
         env:
           ANYPOINT_CLIENT_ID: ${{ secrets.ANYPOINT_CLIENT_ID }}
@@ -175,7 +113,7 @@ jobs:
           open('/tmp/mvn-settings.xml', 'w').write(xml)
           print('Settings written')
           PYEOF
-      - name: Package and deploy to CloudHub 2.0 Sandbox
+      - name: Deploy to CloudHub 2.0 Sandbox
         env:
           ANYPOINT_CLIENT_ID: ${{ secrets.ANYPOINT_CLIENT_ID }}
           ANYPOINT_CLIENT_SECRET: ${{ secrets.ANYPOINT_CLIENT_SECRET }}
@@ -189,6 +127,11 @@ jobs:
             -Dcloudhub2.replicas=${{ env.CH2_REPLICAS }} \
             -Dcloudhub2.vcores=${{ env.CH2_VCORES }}
 
+  # ---------------------------------------------------------------------------
+  # Job 3: Deploy to CloudHub 2.0 Production.
+  # Gated by the 'production' GitHub Environment (required reviewer).
+  # Secrets: the Production environment's client credentials.
+  # ---------------------------------------------------------------------------
   deploy-production:
     name: Deploy to Production
     needs: deploy-sandbox
@@ -231,7 +174,7 @@ jobs:
           open('/tmp/mvn-settings.xml', 'w').write(xml)
           print('Settings written')
           PYEOF
-      - name: Package and deploy to CloudHub 2.0 Production
+      - name: Deploy to CloudHub 2.0 Production
         env:
           ANYPOINT_CLIENT_ID: ${{ secrets.ANYPOINT_CLIENT_ID }}
           ANYPOINT_CLIENT_SECRET: ${{ secrets.ANYPOINT_CLIENT_SECRET }}
