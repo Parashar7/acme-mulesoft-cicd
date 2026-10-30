@@ -1,9 +1,8 @@
 # Deploy pipeline for northbridge-aml-api
 # Stages: build → deploy-sandbox → deploy-production
 #
-# Authentication: each GitHub Environment stores the Anypoint environment's
-# own client credentials (from Runtime Manager → Environments → Client ID/Secret).
-# These have native CloudHub 2.0 deploy permission for their environment.
+# Target is set in the app POM as <target>Cloudhub-US-East-1</target>
+# (CloudHub 2.0 Shared Space – US East Ohio).
 
 name: Deploy northbridge-aml-api
 
@@ -26,14 +25,10 @@ env:
   JAVA_VERSION: '17'
   MAVEN_VERSION: '3.9.9'
   ANYPOINT_ORG_ID: 0d2dd5dc-4a01-4180-a12a-0c3c4d888c7b
-  PRIVATE_SPACE: mcp-private-space
   CH2_REPLICAS: 1
   CH2_VCORES: '0.1'
 
 jobs:
-  # ---------------------------------------------------------------------------
-  # Job 1: Build and package. No tests. Does NOT receive deploy secrets.
-  # ---------------------------------------------------------------------------
   build:
     name: Build
     runs-on: ubuntu-latest
@@ -67,8 +62,8 @@ jobs:
   # ---------------------------------------------------------------------------
   # Job 2: Deploy to CloudHub 2.0 Sandbox.
   # Secrets: ANYPOINT_CLIENT_ID / ANYPOINT_CLIENT_SECRET in the 'sandbox'
-  # GitHub Environment must hold the Sandbox environment's client credentials
-  # (Anypoint Runtime Manager → Environments → Sandbox → Client ID / Secret).
+  # GitHub Environment — Connected App with Create/Read Applications scopes.
+  # Target is taken from the app POM: Cloudhub-US-East-1 (Shared Space).
   # ---------------------------------------------------------------------------
   deploy-sandbox:
     name: Deploy to Sandbox
@@ -123,14 +118,12 @@ jobs:
             -s /tmp/mvn-settings.xml \
             -Danypoint.org.id="${{ env.ANYPOINT_ORG_ID }}" \
             -Danypoint.environment=Sandbox \
-            -Danypoint.private.space="${{ env.PRIVATE_SPACE }}" \
             -Dcloudhub2.replicas=${{ env.CH2_REPLICAS }} \
             -Dcloudhub2.vcores=${{ env.CH2_VCORES }}
 
   # ---------------------------------------------------------------------------
   # Job 3: Deploy to CloudHub 2.0 Production.
   # Gated by the 'production' GitHub Environment (required reviewer).
-  # Secrets: the Production environment's client credentials.
   # ---------------------------------------------------------------------------
   deploy-production:
     name: Deploy to Production
@@ -184,6 +177,5 @@ jobs:
             -s /tmp/mvn-settings.xml \
             -Danypoint.org.id="${{ env.ANYPOINT_ORG_ID }}" \
             -Danypoint.environment=Production \
-            -Danypoint.private.space="${{ env.PRIVATE_SPACE }}" \
             -Dcloudhub2.replicas=${{ env.CH2_REPLICAS }} \
             -Dcloudhub2.vcores=${{ env.CH2_VCORES }}
