@@ -132,8 +132,6 @@ jobs:
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
           restore-keys: ${{ runner.os }}-maven-
       - name: Inspect token scopes
-        # Decodes the JWT payload (no secret needed) to show what scopes are granted.
-        # Credentials are never printed.
         env:
           ANYPOINT_CLIENT_ID: ${{ secrets.ANYPOINT_CLIENT_ID }}
           ANYPOINT_CLIENT_SECRET: ${{ secrets.ANYPOINT_CLIENT_SECRET }}
@@ -145,65 +143,46 @@ jobs:
             --data-urlencode "client_id=${ANYPOINT_CLIENT_ID}" \
             --data-urlencode "client_secret=${ANYPOINT_CLIENT_SECRET}" \
             | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
-          echo "=== Token JWT payload (scopes / claims) ==="
-          python3 - <<'PYEOF'
-          import os, base64, json, sys
-          # Read the token from the environment variable set above
-          import subprocess
-          # We already have TOKEN in shell; pass it via env
-          PYEOF
-          python3 -c "
-import base64, json, sys
-tok = open('/tmp/_tok').read().strip()
+          echo "=== Token JWT scopes ==="
+          echo "${TOKEN}" | python3 -c "
+import sys, base64, json
+tok = sys.stdin.read().strip()
 payload = tok.split('.')[1]
 padding = 4 - len(payload) % 4
-if padding != 4: payload += '=' * padding
+if padding != 4:
+    payload += '=' * padding
 claims = json.loads(base64.b64decode(payload))
-print('scope :', claims.get('scope', 'N/A'))
-print('client:', claims.get('client_id', 'N/A'))
-print('iss   :', claims.get('iss', 'N/A'))
-" 2>/dev/null || (
-            echo "${TOKEN}" > /tmp/_tok
-            python3 -c "
-import base64, json
-tok = open('/tmp/_tok').read().strip()
-payload = tok.split('.')[1]
-padding = 4 - len(payload) % 4
-if padding != 4: payload += '=' * padding
-claims = json.loads(base64.b64decode(payload))
-print('scope :', claims.get('scope', 'N/A'))
-print('client:', claims.get('client_id', 'N/A'))
+print('scope:', claims.get('scope','N/A'))
+print('client_id:', claims.get('client_id','N/A'))
 "
-          )
-          echo "=== Read deployments (GET, to check read access) ==="
-          ENV_ID=$(curl -sf \
+          echo "=== Environments accessible to this token ==="
+          curl -s \
             -H "Authorization: Bearer ${TOKEN}" \
             "https://anypoint.mulesoft.com/accounts/api/organizations/${{ env.ANYPOINT_ORG_ID }}/environments" \
-            | python3 -c "import sys,json; envs=json.load(sys.stdin).get('data',[]); [print(e['id'],e['name']) for e in envs]" 2>/dev/null || echo 'env list failed')
-          echo "Environments: ${ENV_ID}"
+            | python3 -c "import sys,json; d=json.load(sys.stdin); [print(e['id'], e['name']) for e in d.get('data',[])]" 2>/dev/null || echo 'env list failed'
       - name: Write Maven settings
         env:
           ANYPOINT_CLIENT_ID: ${{ secrets.ANYPOINT_CLIENT_ID }}
           ANYPOINT_CLIENT_SECRET: ${{ secrets.ANYPOINT_CLIENT_SECRET }}
         run: |
-          python3 - <<'PYEOF'
-          import os
-          cid = os.environ['ANYPOINT_CLIENT_ID']
-          cs  = os.environ['ANYPOINT_CLIENT_SECRET']
-          xml = ('<?xml version="1.0" encoding="UTF-8"?>\n'
-                 '<settings xmlns="http://maven.apache.org/SETTINGS/1.2.0">\n'
-                 '  <servers>\n'
-                 '    <server>\n'
-                 '      <id>anypoint-exchange-v3</id>\n'
-                 '      <username>~~~Client~~~</username>\n'
-                 f'      <password>{cid}~?~{cs}</password>\n'
-                 '    </server>\n'
-                 '  </servers>\n'
-                 '</settings>\n')
-          with open('/tmp/mvn-settings.xml', 'w') as f:
-              f.write(xml)
-          print('Settings file written')
-          PYEOF
+          python3 -c "
+import os
+cid = os.environ['ANYPOINT_CLIENT_ID']
+cs  = os.environ['ANYPOINT_CLIENT_SECRET']
+xml = '''<?xml version=\"1.0\" encoding=\"UTF-8\"?>
+<settings xmlns=\"http://maven.apache.org/SETTINGS/1.2.0\">
+  <servers>
+    <server>
+      <id>anypoint-exchange-v3</id>
+      <username>~~~Client~~~</username>
+      <password>{cid}~?~{cs}</password>
+    </server>
+  </servers>
+</settings>
+'''.format(cid=cid, cs=cs)
+open('/tmp/mvn-settings.xml', 'w').write(xml)
+print('Settings file written')
+"
       - name: Package and deploy to CloudHub 2.0 Sandbox
         env:
           ANYPOINT_CLIENT_ID: ${{ secrets.ANYPOINT_CLIENT_ID }}
@@ -245,24 +224,24 @@ print('client:', claims.get('client_id', 'N/A'))
           ANYPOINT_CLIENT_ID: ${{ secrets.ANYPOINT_CLIENT_ID }}
           ANYPOINT_CLIENT_SECRET: ${{ secrets.ANYPOINT_CLIENT_SECRET }}
         run: |
-          python3 - <<'PYEOF'
-          import os
-          cid = os.environ['ANYPOINT_CLIENT_ID']
-          cs  = os.environ['ANYPOINT_CLIENT_SECRET']
-          xml = ('<?xml version="1.0" encoding="UTF-8"?>\n'
-                 '<settings xmlns="http://maven.apache.org/SETTINGS/1.2.0">\n'
-                 '  <servers>\n'
-                 '    <server>\n'
-                 '      <id>anypoint-exchange-v3</id>\n'
-                 '      <username>~~~Client~~~</username>\n'
-                 f'      <password>{cid}~?~{cs}</password>\n'
-                 '    </server>\n'
-                 '  </servers>\n'
-                 '</settings>\n')
-          with open('/tmp/mvn-settings.xml', 'w') as f:
-              f.write(xml)
-          print('Settings file written')
-          PYEOF
+          python3 -c "
+import os
+cid = os.environ['ANYPOINT_CLIENT_ID']
+cs  = os.environ['ANYPOINT_CLIENT_SECRET']
+xml = '''<?xml version=\"1.0\" encoding=\"UTF-8\"?>
+<settings xmlns=\"http://maven.apache.org/SETTINGS/1.2.0\">
+  <servers>
+    <server>
+      <id>anypoint-exchange-v3</id>
+      <username>~~~Client~~~</username>
+      <password>{cid}~?~{cs}</password>
+    </server>
+  </servers>
+</settings>
+'''.format(cid=cid, cs=cs)
+open('/tmp/mvn-settings.xml', 'w').write(xml)
+print('Settings file written')
+"
       - name: Package and deploy to CloudHub 2.0 Production
         env:
           ANYPOINT_CLIENT_ID: ${{ secrets.ANYPOINT_CLIENT_ID }}
