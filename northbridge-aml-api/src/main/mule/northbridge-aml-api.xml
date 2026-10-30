@@ -9,8 +9,11 @@
       http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
 http://www.mulesoft.org/schema/mule/a2a http://www.mulesoft.org/schema/mule/a2a/current/mule-a2a.xsd">
 
+  <!-- allowInsecureConnection="true": the CloudHub 2.0 load balancer terminates
+       TLS externally. The app listener is plain HTTP internally, which is
+       intentional. This attribute silences the Mule 4.12 HTTPS enforcement. -->
   <http:listener-config name="aml-http-listener-config">
-    <http:listener-connection host="0.0.0.0" port="${http.port}"/>
+    <http:listener-connection host="0.0.0.0" port="${http.port}" allowInsecureConnection="true"/>
   </http:listener-config>
 
   <flow name="post-aml-screen-flow">
@@ -44,7 +47,8 @@ var hit = hitByName or hitByDirector or hitByOwner
       </ee:message>
     </ee:transform>
   </flow>
-	<flow name="mcp-tools-discovery-flow">
+
+  <flow name="mcp-tools-discovery-flow">
     <http:listener config-ref="aml-http-listener-config" path="/mcp/tools" allowedMethods="GET"/>
     <ee:transform doc:name="Build MCP Tool Catalog">
       <ee:message>
